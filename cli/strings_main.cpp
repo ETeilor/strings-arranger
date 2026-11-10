@@ -1,7 +1,7 @@
 // Command-line front end of the strings engine; every automatic check goes through it.
 //   strings_cli in.mid [out.mid] [--style=mozart] [--complexity=4|V1=0,V2=6,Va=4,Vc=4,Cb=4]
 //               [--section=auto|quartet|baroque|classical|romantic|symphonic]
-//               [--library=none|uacc|split] [--no-dynamics] [--variant=N]
+//               [--library=none|uacc|split|bbcso] [--no-dynamics] [--variant=N]
 //               [--input=auto|chords|harmonize] [--xml=score.musicxml] [--dump] [--list]
 #include <cstdio>
 #include <cstring>
@@ -77,7 +77,7 @@ int main(int argc, char** argv) {
         return 1;
     }
     MidiOptions mo;
-    mo.library = library == "uacc" ? Library::SpitfireUACC : library == "split" ? Library::SplitTracks : Library::None;
+    mo.library = library == "uacc" ? Library::SpitfireUACC : library == "split" ? Library::SplitTracks : library == "bbcso" ? Library::BBCSO : Library::None;
     mo.dynamics = dynamics;
     if (pos.size() > 1) {
         auto b = writeMidi(r, meta, mo);
