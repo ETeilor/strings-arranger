@@ -237,7 +237,7 @@ juce::StringArray names::sections() {
 
 juce::StringArray names::libraries() {
     juce::StringArray a;
-    for (int i = 0; i <= (int)strings::Library::SplitTracks; ++i) a.add(U(strings::libraryLabel((strings::Library)i)));
+    for (int i = 0; i <= (int)strings::Library::BBCSO; ++i) a.add(U(strings::libraryLabel((strings::Library)i)));
     return a;
 }
 

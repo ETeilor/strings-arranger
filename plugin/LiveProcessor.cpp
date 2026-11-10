@@ -32,7 +32,7 @@ void LiveProcessor::prepareToPlay(double sr, int) {
 choir::Settings LiveProcessor::settings() const {
     // classical voice leading, or the modern one that keeps added tones and allows parallels
     bool modern = (int)*params.getRawParameterValue("manner") == 1;
-    choir::Settings s = strings::liveSettings(modern ? strings::Composer::Barber : strings::Composer::Mozart);
+    choir::Settings s = strings::liveSettings(strings::composerById(modern ? "barber" : "mozart"));
     s.variant = (int)*params.getRawParameterValue("variant");
     s.global = 2;
     return s;

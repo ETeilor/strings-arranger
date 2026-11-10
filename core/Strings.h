@@ -15,23 +15,24 @@ constexpr int TPB = choir::TPB;
 // articulation of a note (Note::art)
 enum Art { A_LONG = 0, A_LEGATO, A_STACC, A_SPICC, A_PIZZ, A_TREM, A_MARC };
 
-// the order is the order of the style menu and is saved in projects: add new names at the end only
-enum class Composer { Vivaldi, Bach, Haydn, Mozart, Beethoven, Tchaikovsky, RimskyKorsakov, Dvorak,
-                      Stravinsky, Barber, Herrmann, Zimmer, Sviridov };
-constexpr int NUM_COMPOSERS = 13;
+// A composer style is an index into the profile table (Strings.cpp), in menu order: by era.
+// The index is saved in projects; once a version is released, new styles go to the end only.
+enum class Composer : int {};
+constexpr int NUM_COMPOSERS = 81;
+Composer composerById(const std::string& id);    // unknown id: Mozart
 
 // desks of the section: Auto takes the size the style is usually played with
 enum class Section { Auto, Quartet, Baroque, Classical, Romantic, Symphonic };
 
 // what the MIDI is written for; add new libraries at the end only
-enum class Library { None, SpitfireUACC, SplitTracks };
+enum class Library { None, SpitfireUACC, SplitTracks, BBCSO };
 
 enum { P_V1 = 0, P_V2, P_VA, P_VC, P_CB, NPARTS };
 extern const char* PART_NAMES[NPARTS];    // "Violin I" ... "Contrabass"
 extern const char* PART_SHORT[NPARTS];    // "V1" ... "Cb"
 
 struct Settings {
-    Composer composer = Composer::Mozart;
+    Composer composer = composerById("mozart");
     int global = 4;                                   // complexity 0..10
     int part[NPARTS] = {-1, -1, -1, -1, -1};          // per part; -1 = as the global one
     Section section = Section::Auto;
@@ -53,6 +54,9 @@ struct Result : choir::Result {
     std::array<int, NPARTS> lv{};
     std::array<std::string, NPARTS> textures;   // texture of each part, for the report
     std::string sectionLabel;            // "6-6-4-3-2"
+    std::string manner;                  // what the style does, one line
+    int dynamics = 0;                    // phrase dynamics shape of the style (Strings.cpp)
+    bool quartet = false;
     std::string report() const;
 };
 
@@ -71,11 +75,13 @@ int soundingEnd(const Note& n);
 // names for menus
 const char* composerLabel(Composer c);     // "Моцарт"
 const char* composerId(Composer c);        // "mozart"
+const char* composerGroup(Composer c);     // "Классицизм": menu heading
+const char* composerManner(Composer c);    // what the style does, one line
 const char* sectionLabel(Section s);
 const char* libraryLabel(Library l);
 const char* sectionDesks(Section s, Composer c);
 
-// live mode: the four skeleton voices plus basses an octave under the cellos
+// live mode: the four skeleton voices with the style's harmony; basses are added by the plug-in
 choir::Settings liveSettings(Composer c);
 
 }  // namespace strings

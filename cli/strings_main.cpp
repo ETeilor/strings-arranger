@@ -90,6 +90,9 @@ int main(int argc, char** argv) {
     }
     if (dump) {
         std::cout << "ISSUES " << r.issues.size() << "\n";
+        std::cout << "TEXTURES";
+        for (auto& t : r.textures) std::cout << " |" << t;
+        std::cout << "\n";
         for (auto& p : r.parts) {
             std::cout << "TRACK " << p.name << " " << p.notes.size() << "\n";
             for (auto& n : p.notes) std::cout << n.start << " " << n.end << " " << n.pitch << " " << n.art << "\n";

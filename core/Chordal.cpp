@@ -1257,6 +1257,7 @@ static void applySkeleton(StyleP& st, const Skeleton& k) {
     st.melLo = k.melLo, st.melHi = k.melHi, st.melCLo = k.melCLo, st.melCHi = k.melCHi;
     st.maxSA = k.maxSA, st.maxAT = k.maxAT, st.maxTB = k.maxTB;
     if (k.freeParallels) st.parallels = 0, st.checkParallels = false, st.wHidden = 0;
+    st.maxST = 99;   // no close-harmony limit between the outer upper voices
 }
 
 // parts that sit long near the top (or bottom) of their range
@@ -1305,6 +1306,7 @@ Result arrange(const std::vector<Note>& notes, const Meta& meta, const Settings&
         res.error = "в файле не найдено аккордов";
         return res;
     }
+    if (s.harmony) s.harmony(an.chords, an.melody, an.tonic, an.minor);
     std::string melodyLabel = harmonized ? "только мелодия, аккорды подобраны плагином"
                               : an.source == MelodySource::SeparateTrack ? "отдельная дорожка"
                               : an.source == MelodySource::SeparateLine ? "отдельная линия над аккордами"
@@ -1378,7 +1380,7 @@ Result arrange(const std::vector<Note>& notes, const Meta& meta, const Settings&
     if (!viterbi(slices, sch, st, an.tonic, path, res.error)) return finish(res);
     Parts parts = toParts(slices, path, st.homorhythm, st.melodyVoice);
     res.figures = ornament(parts, sch, an.tonic, an.minor, st, meta.num * TPB);
-    if (st.id == "renaissance") {
+    if (st.id == "renaissance" && !s.skeleton.on) {   // staggered entries are a choral device
         int n = renaissanceEntries(parts, sch, an.tonic, an.minor, st, meta.num * TPB, lv.max());
         if (n) res.figures["imitation"] = n;
     }

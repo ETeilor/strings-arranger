@@ -93,11 +93,12 @@ int main(int argc, char** argv) {
     bool eq = q.result().parts.size() == p.result().parts.size() && q.result().parts.size() == 4;
     for (size_t i = 0; eq && i < q.result().parts.size(); ++i)
         eq = q.result().parts[i].notes.size() == p.result().parts[i].notes.size();
-    expect(eq, "сохранение в проекте: Чайковский в квартетном составе восстановлен (4 партии)");
+    expect(eq, "сохранение в проекте: стиль и квартетный состав восстановлены (4 партии)");
     p.params.getParameter("section")->setValueNotifyingHost(0.0f);
     pump(200);
 
     // 4. drag files
+    p.params.getParameter("library")->setValueNotifyingHost(0.0f);
     auto f = p.writePartFile(0);
     expect(f.existsAsFile() && f.getSize() > 50, "файл партии для перетаскивания: " + f.getFileName());
     auto all = p.writePartFile(-1);
@@ -123,7 +124,19 @@ int main(int argc, char** argv) {
         p.params.getParameter("library")->setValueNotifyingHost(p.params.getParameter("library")->convertTo0to1(2));
         int n2 = tracks(p.writePartFile(-1), cc);
         expect(n2 > plain, "дорожка на штрих: дорожек " + juce::String(n2 - 1));
-        p.params.getParameter("library")->setValueNotifyingHost(0.0f);
+        // BBC SO: UACC, and the tracks carry the names of the patches
+        p.params.getParameter("library")->setValueNotifyingHost(p.params.getParameter("library")->convertTo0to1(3));
+        auto bbc = p.writePartFile(-1);
+        int n3 = tracks(bbc, cc);
+        juce::MidiFile mf;
+        juce::FileInputStream in(bbc);
+        mf.readFrom(in);
+        juce::StringArray trackNames;
+        for (int t = 0; t < mf.getNumTracks(); ++t)
+            for (auto* e : *mf.getTrack(t))
+                if (e->message.isTrackNameEvent()) trackNames.add(e->message.getTextFromTextMetaEvent());
+        expect(n3 == plain && cc > 0 && trackNames.contains("Violins 1") && trackNames.contains("Celli") && trackNames.contains("Basses"),
+               "BBC SO: дорожки " + trackNames.joinIntoString(", "));
     }
 
     // 5. preview audio: piano (default) and the string pad
@@ -398,23 +411,26 @@ int main(int argc, char** argv) {
         juce::PNGImageFormat().writeImageToStream(img, os);
     }
 
-    // 6. editor snapshots, one per style
+    // 6. every style arranges and writes a score; editor snapshots for a few of them
     p.params.getParameter("complexity")->setValueNotifyingHost(p.params.getParameter("complexity")->convertTo0to1(6));
+    const juce::StringArray shots{"vivaldi", "mozart", "tchaikovsky", "debussy", "part", "herrmann", "zimmer", "artemyev"};
+    int styleFails = 0;
     for (int st = 0; st < strings::NUM_COMPOSERS; ++st) {
         juce::String tag = strings::composerId((strings::Composer)st);
         p.params.getParameter("style")->setValueNotifyingHost(p.params.getParameter("style")->convertTo0to1((float)st));
-        pump(200);
-        expect(p.result().ok() && !p.result().parts.empty(), "стиль " + tag + ": " +
-               juce::String((int)p.result().parts.size()) + " партий " + juce::String::fromUTF8(p.result().error.c_str()));
-        auto x = juce::XmlDocument::parse(p.scoreXml());
-        expect(x != nullptr, "ноты для " + tag);
-        if (st == 3) {   // play halfway so the keyboard lights up in the snapshot
+        pump(60);
+        bool ok = p.result().ok() && p.result().parts.size() >= 4 && juce::XmlDocument::parse(p.scoreXml()) != nullptr;   // a quartet style has four
+        if (!ok) {
+            ++styleFails;
+            std::cout << "  FAIL стиль " << tag << " " << p.result().error << "\n";
+        }
+        if (!shots.contains(tag)) continue;
+        if (tag == "mozart") {   // play halfway so the keyboard lights up in the snapshot
             p.setPreview(true);
             juce::MidiBuffer mo;
             for (int i = 0; i < 300; ++i) p.processBlock(buf, mo);
         }
-        if (st == 5) p.toggleLock("Cello");   // a locked chip in one snapshot
-        if (st == 7) p.params.getParameter("library")->setValueNotifyingHost(p.params.getParameter("library")->convertTo0to1(1));
+        if (tag == "tchaikovsky") p.toggleLock("Cello");   // a locked chip in one snapshot
         std::unique_ptr<juce::AudioProcessorEditor> ed(p.createEditor());
         ed->setSize(1120, 720);
         pump(100);
@@ -425,8 +441,9 @@ int main(int argc, char** argv) {
         juce::PNGImageFormat().writeImageToStream(img, os);
         expect(out.getSize() > 1000, "снимок интерфейса " + out.getFileName());
         p.setPreview(false);
-        if (st == 5) p.toggleLock("Cello");
+        if (tag == "tchaikovsky") p.toggleLock("Cello");
     }
+    expect(styleFails == 0, juce::String::fromUTF8("все стили дают партии и ноты, стилей ") + juce::String(strings::NUM_COMPOSERS));
     StringsProcessor empty;
     std::unique_ptr<juce::AudioProcessorEditor> ed(empty.createEditor());
     ed->setSize(1120, 720);

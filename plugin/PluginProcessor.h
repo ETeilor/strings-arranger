@@ -112,7 +112,7 @@ private:
     std::atomic<int> captureNum_{4}, captureDen_{4};
 
     // preview synth
-    struct PEvent { double tick; int note; bool on; int vel; };
+    struct PEvent { double tick; int note; bool on; int vel; bool pluck; };
     juce::SpinLock previewLock_;
     std::vector<PEvent> previewEvents_;
     double previewLenTicks_ = 0;

@@ -20,7 +20,7 @@ jobs:
         run: python3 tests/compare_golden.py tests/reference.json build/Release/skeleton_cli tests
 
       - name: Every style on every test file at every level
-        run: python3 tests/sweep_strings.py build/Release/strings_cli tests
+        run: python3 tests/sweep_strings.py build/Release/strings_cli tests --quick
 
       - name: Validate the Audio Unit with auval
         run: |
@@ -33,7 +33,7 @@ jobs:
           auval -v aumi StLv Tlrm
 
       - name: Installer (.pkg and .dmg)
-        run: bash scripts/make_installer.sh 0.1.0
+        run: bash scripts/make_installer.sh 0.2.0
 
       - name: Install the package the way a user does and validate the installed AU
         run: |

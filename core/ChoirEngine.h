@@ -2,6 +2,7 @@
 // Pure C++17, no JUCE. Port of the Python prototype 0.3; outputs match it note for note.
 #pragma once
 #include <array>
+#include <functional>
 #include <map>
 #include <optional>
 #include <set>
@@ -86,6 +87,9 @@ struct Settings {
     bool majorFinal = true;               // Soviet style: a minor piece may close on a major tonic (levels 6+)
     std::map<std::string, std::vector<Note>> locks;   // part name -> notes kept as they are
     Skeleton skeleton;                    // off for the choir; set by the strings layer
+    // the strings layer may recolour the harmony of a style (sevenths, borrowed chords, ...) after the
+    // chords are known and before they are voiced; empty for the choir
+    std::function<void(std::vector<Chord>&, const std::vector<Note>& melody, int tonic, bool minor)> harmony;
 
     static Settings fromSpec(Style st, const std::string& complexitySpec);
 };

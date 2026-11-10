@@ -12,28 +12,43 @@ struct AahSound : juce::SynthesiserSound {
     bool appliesToChannel(int) override { return true; }
 };
 
+// A section, not one player: three slightly detuned copies of a bowed-string wave, each with its own
+// vibrato, read from a table built once per note. Soft attack, the bow stays on until the note ends.
 struct AahVoice : juce::SynthesiserVoice {
     using juce::SynthesiserVoice::renderNextBlock;
     bool canPlaySound(juce::SynthesiserSound* s) override { return dynamic_cast<AahSound*>(s) != nullptr; }
 
     void startNote(int note, float velocity, juce::SynthesiserSound*, int) override {
+        const double sr = getSampleRate();
         f0 = juce::MidiMessage::getMidiNoteInHertz(note);
-        gain = 0.12f * velocity;
-        phase = 0;
-        vibPhase = juce::Random::getSystemRandom().nextDouble() * juce::MathConstants<double>::twoPi;
-        env.setSampleRate(getSampleRate());
-        env.setParameters({0.035f, 0.1f, 0.9f, 0.16f});
-        env.noteOn();
-        // a bowed-string spectrum: every harmonic, falling off, with the body resonance near 500 Hz
-        for (int h = 0; h < kH; ++h) {
-            double fr = (h + 1) * f0;
-            double body = 1.0 + 0.8 * std::exp(-std::pow((fr - 500) / 260, 2)) + 0.4 * std::exp(-std::pow((fr - 2600) / 700, 2));
-            amp[h] = fr < getSampleRate() / 2 - 1000 ? (float)(body / std::pow((double)(h + 1), 1.15)) : 0.0f;
+        gain = 0.07f + 0.11f * velocity;
+        // one cycle: every harmonic, falling off, shaped by the body resonances; louder notes are brighter
+        double tilt = 1.35 - 0.35 * velocity;
+        std::fill(std::begin(table), std::end(table), 0.0f);
+        int harmonics = (int)std::min(40.0, (sr / 2 - 1500) / f0);
+        for (int h = 1; h <= harmonics; ++h) {
+            double fr = h * f0;
+            double body = 1.0 + 0.9 * std::exp(-std::pow((fr - 480) / 240, 2)) + 0.5 * std::exp(-std::pow((fr - 2500) / 800, 2));
+            double a = body / std::pow((double)h, tilt);
+            double ph = 0.37 * h * h;   // fixed phases, so the wave is not a spike
+            for (int i = 0; i < kTable; ++i)
+                table[i] += (float)(a * std::sin(juce::MathConstants<double>::twoPi * h * i / kTable + ph));
         }
-        float norm = 0;
-        for (float a : amp) norm += a * a;
-        norm = std::sqrt(norm);
-        if (norm > 0) for (float& a : amp) a /= norm;
+        float peak = 0.0001f;
+        for (float x : table) peak = std::max(peak, std::abs(x));
+        for (float& x : table) x /= peak;
+        table[kTable] = table[0];
+        auto& rnd = juce::Random::getSystemRandom();
+        const double cents[kCopies] = {-7.0, 0.0, 6.0};
+        for (int k = 0; k < kCopies; ++k) {
+            detune[k] = std::pow(2.0, cents[k] / 1200.0);
+            phase[k] = rnd.nextDouble();
+            vibPhase[k] = rnd.nextDouble() * juce::MathConstants<double>::twoPi;
+            vibRate[k] = 4.9 + 0.5 * k;
+        }
+        env.setSampleRate(sr);
+        env.setParameters({0.05f, 0.12f, 0.88f, 0.14f});
+        env.noteOn();
         age = 0;
     }
     void stopNote(float, bool allowTail) override {
@@ -46,24 +61,27 @@ struct AahVoice : juce::SynthesiserVoice {
         if (!isVoiceActive()) return;
         const double sr = getSampleRate();
         for (int i = 0; i < num; ++i) {
-            double vibDepth = 0.004 * juce::jlimit(0.0, 1.0, age / (0.35 * sr));
-            double f = f0 * (1.0 + vibDepth * std::sin(vibPhase));
-            vibPhase += juce::MathConstants<double>::twoPi * 5.2 / sr;
-            phase += juce::MathConstants<double>::twoPi * f / sr;
-            if (phase > juce::MathConstants<double>::twoPi * 1000) phase -= juce::MathConstants<double>::twoPi * 1000;
+            double depth = 0.0035 * juce::jlimit(0.0, 1.0, age / (0.3 * sr));   // vibrato comes in after the attack
             float s = 0;
-            for (int h = 0; h < kH; ++h)
-                if (amp[h] != 0) s += amp[h] * (float)std::sin((h + 1) * phase);
-            float e = env.getNextSample();
-            float v = s * e * gain;
+            for (int k = 0; k < kCopies; ++k) {
+                double f = f0 * detune[k] * (1.0 + depth * std::sin(vibPhase[k]));
+                vibPhase[k] += juce::MathConstants<double>::twoPi * vibRate[k] / sr;
+                phase[k] += f / sr;
+                if (phase[k] >= 1.0) phase[k] -= 1.0;
+                double x = phase[k] * kTable;
+                int i0 = (int)x;
+                float fr = (float)(x - i0);
+                s += table[i0] + fr * (table[i0 + 1] - table[i0]);
+            }
+            float v = s * (1.0f / kCopies) * env.getNextSample() * gain;
             for (int ch = 0; ch < out.getNumChannels(); ++ch) out.addSample(ch, start + i, v);
             ++age;
             if (!env.isActive()) { clearCurrentNote(); break; }
         }
     }
-    static constexpr int kH = 24;
-    float amp[kH]{};
-    double f0 = 220, phase = 0, vibPhase = 0, age = 0;
+    static constexpr int kTable = 1024, kCopies = 3;
+    float table[kTable + 1]{};
+    double f0 = 220, age = 0, detune[kCopies]{}, phase[kCopies]{}, vibPhase[kCopies]{}, vibRate[kCopies]{};
     float gain = 0.1f;
     juce::ADSR env;
 };
@@ -154,7 +172,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout StringsProcessor::layout() {
     using namespace juce;
     AudioProcessorValueTreeState::ParameterLayout l;
     l.add(std::make_unique<AudioParameterChoice>(ParameterID{"style", 1}, "Style", styleNames(),
-                                                 (int)strings::Composer::Mozart));
+                                                 (int)strings::composerById("mozart")));
     l.add(std::make_unique<AudioParameterInt>(ParameterID{"complexity", 1}, "Complexity", 0, 10, 4));
     auto voiceAttr = AudioParameterIntAttributes().withStringFromValueFunction(
         [](int v, int) { return v < 0 ? String::fromUTF8("общая") : String(v); });
@@ -163,13 +181,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout StringsProcessor::layout() {
                                                   -1, 10, -1, voiceAttr));
     l.add(std::make_unique<AudioParameterChoice>(ParameterID{"section", 1}, "Section", names::sections(), 0));
     // the library the MIDI is written for, and phrase dynamics on the mod wheel for it
-    l.add(std::make_unique<AudioParameterChoice>(ParameterID{"library", 1}, "Library", names::libraries(), 0));
+    l.add(std::make_unique<AudioParameterChoice>(ParameterID{"library", 1}, "Library", names::libraries(),
+                                                 (int)strings::Library::BBCSO));
     l.add(std::make_unique<AudioParameterBool>(ParameterID{"dynamics", 1}, "Dynamics CC1", true));
     l.add(std::make_unique<AudioParameterChoice>(ParameterID{"input", 1}, "Input",
                                                  StringArray{U("Авто"), U("Аккорды"), U("Гармонизовать мелодию")}, 0));
     l.add(std::make_unique<AudioParameterInt>(ParameterID{"variant", 1}, "Variant", 0, 9999, 0));
     l.add(std::make_unique<AudioParameterChoice>(ParameterID{"sound", 1}, "Preview sound",
-                                                 StringArray{U("Пианино"), U("Струнные")}, 0));
+                                                 StringArray{U("Пианино"), U("Струнная секция")}, 0));
     return l;
 }
 
@@ -363,7 +382,7 @@ strings::Settings StringsProcessor::currentSettings() const {
 
 strings::MidiOptions StringsProcessor::midiOptions() const {
     strings::MidiOptions o;
-    o.library = (strings::Library)juce::jlimit(0, (int)strings::Library::SplitTracks, (int)*params.getRawParameterValue("library"));
+    o.library = (strings::Library)juce::jlimit(0, (int)strings::Library::BBCSO, (int)*params.getRawParameterValue("library"));
     o.dynamics = *params.getRawParameterValue("dynamics") > 0.5f;
     return o;
 }
@@ -539,8 +558,8 @@ void StringsProcessor::rebuildPreviewEvents() {
     for (auto& p : result_.parts)
         for (auto& n : p.notes) {
             // short bowings and pizzicato sound short in the preview too
-            ev.push_back({(double)n.start, n.pitch, true, n.vel});
-            ev.push_back({(double)strings::soundingEnd(n), n.pitch, false, 0});
+            ev.push_back({(double)n.start, n.pitch, true, n.vel, n.art == strings::A_PIZZ});
+            ev.push_back({(double)strings::soundingEnd(n), n.pitch, false, 0, n.art == strings::A_PIZZ});
             len = std::max(len, (double)n.end);
         }
     std::stable_sort(ev.begin(), ev.end(), [](const PEvent& a, const PEvent& b) {
@@ -597,7 +616,9 @@ void StringsProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Midi
     }
     midi.clear();
 
-    juce::MidiBuffer synthMidi;
+    // the string sound plays plucked notes on the piano voice: a pad cannot pluck
+    bool usePiano = (int)*params.getRawParameterValue("sound") == 0;
+    juce::MidiBuffer padMidi, pianoMidi;
     if (killNotes_.exchange(false)) {
         synth_.allNotesOff(0, false);
         piano_.allNotesOff(0, false);
@@ -612,20 +633,19 @@ void StringsProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Midi
                 auto& e = previewEvents_[previewIdx_++];
                 int s = juce::jlimit(0, n - 1, (int)((e.tick - t0) / ticksPerSample));
                 auto m = e.on ? juce::MidiMessage::noteOn(1, e.note, (juce::uint8)juce::jlimit(1, 127, e.vel)) : juce::MidiMessage::noteOff(1, e.note);
-                synthMidi.addEvent(m, s);
+                (usePiano || e.pluck ? pianoMidi : padMidi).addEvent(m, s);
                 midi.addEvent(m, s);
             }
             previewTicks_ = t1;
             if (t1 > previewLenTicks_ + choir::TPB) {
                 previewOn_ = false;
-                synthMidi.addEvent(juce::MidiMessage::allNotesOff(1), n - 1);
+                padMidi.addEvent(juce::MidiMessage::allNotesOff(1), n - 1);
+                pianoMidi.addEvent(juce::MidiMessage::allNotesOff(1), n - 1);
             }
         }
     }
-    bool usePiano = (int)*params.getRawParameterValue("sound") == 0;
-    juce::MidiBuffer empty;
-    (usePiano ? piano_ : synth_).renderNextBlock(buffer, synthMidi, 0, n);
-    (usePiano ? synth_ : piano_).renderNextBlock(buffer, empty, 0, n);   // lets released notes ring out
+    piano_.renderNextBlock(buffer, pianoMidi, 0, n);
+    synth_.renderNextBlock(buffer, padMidi, 0, n);   // both always run, so released notes ring out
 }
 
 // ---------------------------------------------------------------- state

@@ -157,12 +157,21 @@ StringsEditor::StringsEditor(StringsProcessor& p) : AudioProcessorEditor(p), pro
     addAndMakeVisible(sectionVal);
 
     for (auto* c : {&styleBox, &sectionBox, &libraryBox, &soundBox, &inputBox}) addAndMakeVisible(c);
-    styleBox.addItemList(StringsProcessor::styleNames(), 1);
+    {
+        // the menu is grouped by era; headings are not items, so item index = style index
+        juce::String group;
+        for (int i = 0; i < strings::NUM_COMPOSERS; ++i) {
+            auto g = U(strings::composerGroup((strings::Composer)i));
+            if (g != group) styleBox.addSectionHeading(g);
+            group = g;
+            styleBox.addItem(U(strings::composerLabel((strings::Composer)i)), i + 1);
+        }
+    }
     sectionBox.addItemList(names::sections(), 1);
     sectionBox.setTooltip(U("Сколько пультов в группах. «По стилю» берёт состав, обычный для композитора. В квартете нет контрабасов и divisi"));
     libraryBox.addItemList(names::libraries(), 1);
-    libraryBox.setTooltip(U("Для чего пишется MIDI. Spitfire: штрихи переключаются по UACC (CC32). «Дорожка на штрих»: каждый штрих отдельной дорожкой для любой библиотеки"));
-    soundBox.addItemList({U("Пианино"), U("Струнные")}, 1);
+    libraryBox.setTooltip(U("Для чего пишется MIDI. BBC Symphony Orchestra: дорожки названы как патчи, штрихи переключаются по UACC (CC32). Spitfire: то же для других библиотек Spitfire. «Дорожка на штрих»: каждый штрих отдельной дорожкой для любой библиотеки"));
+    soundBox.addItemList({U("Пианино"), U("Струнная секция")}, 1);
     inputBox.addItemList({U("Авто"), U("Аккорды"), U("Гармонизовать мелодию")}, 1);
     inputBox.setTooltip(U("Авто: если на входе одна мелодия без аккордов, плагин подберёт аккорды сам"));
     styleA = std::make_unique<CA>(proc.params, "style", styleBox);
