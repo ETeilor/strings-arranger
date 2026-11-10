@@ -1,0 +1,288 @@
+diff --git a/modules/juce_gui_basics/native/juce_NSViewComponentPeer_mac.mm b/modules/juce_gui_basics/native/juce_NSViewComponentPeer_mac.mm
+index 86ea738..5c59e29 100644
+--- a/modules/juce_gui_basics/native/juce_NSViewComponentPeer_mac.mm
++++ b/modules/juce_gui_basics/native/juce_NSViewComponentPeer_mac.mm
+@@ -1465,7 +1465,12 @@ public:
+             JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+         }();
+ 
+-        return [NSArray arrayWithObjects: type, (NSString*) kPasteboardTypeFileURLPromise, NSPasteboardTypeString, nil];
++        // Choir Arranger patch: also listen for legacy file names, both kinds of file promise and raw MIDI data,
++        // so regions dragged out of a DAW reach the plug-in window.
++        return [NSArray arrayWithObjects: type, (NSString*) kPasteboardTypeFileURLPromise, NSPasteboardTypeString,
++                                          @"NSFilenamesPboardType", @"Apple files promise pasteboard type",
++                                          @"com.apple.NSFilePromiseItemMetaData", @"public.midi-audio",
++                                          @"public.data", @"public.item", nil];
+     }
+ 
+     BOOL sendDragCallback (bool (ComponentPeer::* callback) (const DragInfo&), id <NSDraggingInfo> sender)
+@@ -1481,15 +1486,266 @@ public:
+         ComponentPeer::DragInfo dragInfo;
+         dragInfo.position = detail::ScalingHelpers::screenPosToLocalPos (component, p).roundToInt();
+ 
++        // Choir Arranger patch: the drop itself goes through choirReceiveDrop, which understands
++        // file URLs, file promises (modern and legacy) and raw MIDI data on the pasteboard.
++        if (callback == &ComponentPeer::handleDragDrop)
++            return choirReceiveDrop (sender, pasteboard, dragInfo.position);
++
+         if (contentType == NSPasteboardTypeString)
+             dragInfo.text = nsStringToJuce ([pasteboard stringForType: NSPasteboardTypeString]);
+         else
+             dragInfo.files = getDroppedFiles (pasteboard, contentType);
+ 
+-        if (! dragInfo.isEmpty())
+-            return (this->*callback) (dragInfo);
++        // while hovering, anything that may turn into a file shows up as a placeholder file
++        if (dragInfo.files.isEmpty())
++        {
++            dragInfo.text = {};
++            dragInfo.files.add ("choir-pending-drop.mid");
++        }
+ 
+-        return false;
++        return (this->*callback) (dragInfo);
++    }
++
++    //==============================================================================
++    // Choir Arranger patch: drop receiver.
++    struct ChoirDropState
++    {
++        CriticalSection lock;
++        StringArray received;    // files written by promise receivers
++        String report;
++    };
++
++    static bool choirIsMidi (const File& f)
++    {
++        FileInputStream in (f);
++        char h[4] = {};
++        return in.openedOk() && in.read (h, 4) == 4 && memcmp (h, "MThd", 4) == 0;
++    }
++
++    static String choirHead (NSData* d)
++    {
++        if (d == nil)
++            return "nil";
++
++        String s;
++        const auto* b = (const unsigned char*) [d bytes];
++        const auto n = jmin ((int) [d length], 24);
++
++        for (int i = 0; i < n; ++i)
++            s << (b[i] >= 32 && b[i] < 127 ? String::charToString ((juce_wchar) b[i]) : String ("."));
++
++        return s;
++    }
++
++    class ChoirDropPoller : private Timer
++    {
++    public:
++        ChoirDropPoller (Component& c, Point<int> pos, StringArray f, File d, std::shared_ptr<ChoirDropState> st,
++                         bool expectPromise)
++            : target (&c), position (pos), files (std::move (f)), dir (std::move (d)), state (std::move (st)),
++              waitMs (expectPromise ? 8000 : 400), started (Time::getMillisecondCounter())
++        {
++            startTimer (60);
++        }
++
++    private:
++        void timerCallback() override
++        {
++            StringArray cands (files);
++            {
++                const ScopedLock sl (state->lock);
++                cands.addArray (state->received);
++            }
++
++            for (auto& f : dir.findChildFiles (File::findFiles, true))
++                cands.add (f.getFullPathName());
++
++            for (auto& path : cands)
++            {
++                File f (path);
++
++                if (f.isDirectory())
++                {
++                    for (auto& c : f.findChildFiles (File::findFiles, true))
++                        if (choirIsMidi (c) && stable (c))
++                            return deliver (c.getFullPathName());
++
++                    continue;
++                }
++
++                if (f.existsAsFile() && choirIsMidi (f) && stable (f))
++                    return deliver (path);
++            }
++
++            if (Time::getMillisecondCounter() - started < (uint32) waitMs)
++                return;
++
++            // nothing usable arrived: hand the plug-in a report of what the pasteboard held
++            String r;
++            {
++                const ScopedLock sl (state->lock);
++                r = state->report;
++                r << "received by promise:\n";
++                for (auto& x : state->received) r << "  " << x << "\n";
++            }
++            r << "candidates:\n";
++            for (auto& path : cands)
++            {
++                File f (path);
++                MemoryBlock mb;
++                String head;
++                if (f.existsAsFile())
++                {
++                    FileInputStream in (f);
++                    if (in.openedOk()) { in.readIntoMemoryBlock (mb, 24); head = String::createStringFromData (mb.getData(), (int) mb.getSize()); }
++                }
++                r << "  " << path << (f.isDirectory() ? " [dir]" : f.existsAsFile() ? " size " + String (f.getSize()) : " [missing]")
++                  << " head '" << head.retainCharacters ("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 ._-/") << "'\n";
++            }
++            auto rep = File::getSpecialLocation (File::tempDirectory).getChildFile ("ChoirArranger").getChildFile ("choir-drag-report.txt");
++            rep.getParentDirectory().createDirectory();
++            rep.replaceWithText (r);
++            deliver (rep.getFullPathName());
++        }
++
++        bool stable (const File& f)
++        {
++            const auto size = f.getSize();
++            const auto key = f.getFullPathName();
++            const auto it = sizes.find (key);
++            sizes[key] = size;
++            return size > 13 && it != sizes.end() && it->second == size;
++        }
++
++        void deliver (const String& path)
++        {
++            stopTimer();
++
++            if (auto* c = target.get())
++                if (auto* peer = c->getPeer())
++                {
++                    ComponentPeer::DragInfo info;
++                    info.position = position;
++                    info.files.add (path);
++                    peer->handleDragDrop (info);
++                }
++
++            delete this;
++        }
++
++        WeakReference<Component> target;
++        Point<int> position;
++        StringArray files;
++        File dir;
++        std::shared_ptr<ChoirDropState> state;
++        int waitMs;
++        uint32 started;
++        std::map<String, int64> sizes;
++    };
++
++    BOOL choirReceiveDrop (id <NSDraggingInfo> sender, NSPasteboard* pb, Point<int> position)
++    {
++        auto state = std::make_shared<ChoirDropState>();
++        const auto dir = File::getSpecialLocation (File::tempDirectory)
++                             .getChildFile ("JuceDroppedPromises")
++                             .getChildFile (String (Time::currentTimeMillis()));
++        dir.createDirectory();
++        NSURL* dest = [NSURL fileURLWithPath: juceStringToNS (dir.getFullPathName()) isDirectory: YES];
++
++        String report = "Choir Arranger drop report\npasteboard types:\n";
++        StringArray files;
++        int rawIndex = 0;
++
++        for (NSPasteboardItem* item in [pb pasteboardItems])
++        {
++            for (NSString* t in [item types])
++            {
++                NSData* d = [item dataForType: t];
++                report << "  " << nsStringToJuce (t) << "  " << (d != nil ? String ((int) [d length]) : String ("-"))
++                       << " bytes  '" << choirHead (d) << "'\n";
++
++                // raw Standard MIDI File data anywhere in the first bytes
++                if (d != nil && [d length] > 14)
++                {
++                    const auto* b = (const char*) [d bytes];
++                    const auto n = (int) jmin ((NSUInteger) 512, [d length] - 4);
++
++                    for (int i = 0; i < n; ++i)
++                        if (memcmp (b + i, "MThd", 4) == 0)
++                        {
++                            auto f = dir.getChildFile ("raw" + String (rawIndex++) + ".mid");
++                            f.replaceWithData (b + i, (size_t) [d length] - (size_t) i);
++                            files.add (f.getFullPathName());
++                            break;
++                        }
++                }
++            }
++        }
++
++        // plain file URLs and legacy file name lists
++        for (NSURL* url in [pb readObjectsForClasses: @[[NSURL class]] options: nil])
++            if ([url isFileURL])
++                files.add (nsStringToJuce ([[url filePathURL] path] != nil ? [[url filePathURL] path] : [url path]));
++
++        id names = [pb propertyListForType: @"NSFilenamesPboardType"];
++        if ([names isKindOfClass: [NSArray class]])
++            for (id n in (NSArray*) names)
++                if ([n isKindOfClass: [NSString class]])
++                    files.add (nsStringToJuce ((NSString*) n));
++
++        if (auto* s = [pb stringForType: NSPasteboardTypeString])
++        {
++            const auto str = nsStringToJuce (s).trim();
++            if (str.startsWithChar ('/') && File (str).exists())
++                files.add (str);
++        }
++
++        files.removeDuplicates (false);
++        report << "file paths:\n";
++        for (auto& f : files) report << "  " << f << "\n";
++
++        // modern file promises
++        bool promise = false;
++        NSArray* receivers = [pb readObjectsForClasses: @[[NSFilePromiseReceiver class]] options: nil];
++        report << "promise receivers: " << (int) [receivers count] << "\n";
++
++        static NSOperationQueue* queue = [[NSOperationQueue alloc] init];
++
++        for (NSFilePromiseReceiver* receiver in receivers)
++        {
++            promise = true;
++            [receiver receivePromisedFilesAtDestination: dest
++                                                options: @{}
++                                         operationQueue: queue
++                                                 reader: ^(NSURL* fileURL, NSError* error)
++            {
++                const ScopedLock sl (state->lock);
++                if (error != nil)
++                    state->report << "promise error: " << nsStringToJuce ([error localizedDescription]) << "\n";
++                if (fileURL != nil)
++                    state->received.add (nsStringToJuce ([fileURL path]));
++            }];
++        }
++
++        // legacy file promises (NSFilesPromisePboardType)
++        if (! promise && [[pb types] containsObject: @"Apple files promise pasteboard type"])
++        {
++            JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wdeprecated-declarations")
++            NSArray* promised = [sender namesOfPromisedFilesDroppedAtDestination: dest];
++            JUCE_END_IGNORE_WARNINGS_GCC_LIKE
++            report << "legacy promise names: " << (int) [promised count] << "\n";
++            for (NSString* n in promised)
++                report << "  " << nsStringToJuce (n) << "\n";
++            promise = true;
++        }
++
++        {
++            const ScopedLock sl (state->lock);
++            state->report = report + state->report;
++        }
++
++        new ChoirDropPoller (component, position, files, dir, state, promise || files.isEmpty());
++        return YES;
+     }
+ 
+     StringArray getDroppedFiles (NSPasteboard* pasteboard, NSString* contentType)

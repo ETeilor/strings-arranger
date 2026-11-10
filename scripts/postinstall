@@ -1,0 +1,14 @@
+#!/bin/sh
+# Runs as root after the installer copies the files.
+# A plug-in that is not signed by an Apple-registered developer will not open in Logic while it
+# carries the "downloaded from the internet" flag, so the flag is cleared here, and the Audio Unit
+# registry is restarted so Logic sees the new version.
+for p in "/Library/Audio/Plug-Ins/Components/Strings Arranger.component" \
+         "/Library/Audio/Plug-Ins/VST3/Strings Arranger.vst3" \
+         "/Library/Audio/Plug-Ins/Components/Strings Arranger Live.component" \
+         "/Library/Audio/Plug-Ins/VST3/Strings Arranger Live.vst3" \
+         "/Applications/Strings Arranger.app"; do
+    [ -e "$p" ] && xattr -dr com.apple.quarantine "$p" 2>/dev/null
+done
+killall -9 AudioComponentRegistrar 2>/dev/null
+exit 0
