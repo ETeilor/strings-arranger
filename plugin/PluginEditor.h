@@ -72,13 +72,14 @@ private:
     juce::ComboBox styleBox, sectionBox, libraryBox, soundBox, inputBox;
     juce::ToggleButton dynamicsBtn{U("Динамика CC1")};
     juce::Label inputLbl, styleLbl, sectionLbl, sectionVal, libraryLbl, complexityLbl, complexityVal, voicesLbl, soundLbl,
-        variantsLbl, variantLbl, titleLbl, sourceLbl, report;
-    juce::Slider complexity;
+        variantsLbl, variantLbl, titleLbl, sourceLbl, report, livelinessLbl, livelinessVal;
+    juce::Slider complexity, liveliness;
     juce::Slider voice[strings::NPARTS];          // Violin I .. Contrabass
     juce::Label voiceLbl[strings::NPARTS], voiceVal[strings::NPARTS];
     std::unique_ptr<CA> styleA, sectionA, libraryA, soundA, inputA;
     std::unique_ptr<BA> dynamicsA;
-    std::unique_ptr<SA> complexityA, voiceA[strings::NPARTS];
+    std::unique_ptr<SA> complexityA, livelinessA, voiceA[strings::NPARTS];
+    std::unique_ptr<juce::Drawable> logo;
 
     PianoRoll roll;
     SlotBar slots;

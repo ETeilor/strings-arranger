@@ -413,7 +413,8 @@ int main(int argc, char** argv) {
 
     // 6. every style arranges and writes a score; editor snapshots for a few of them
     p.params.getParameter("complexity")->setValueNotifyingHost(p.params.getParameter("complexity")->convertTo0to1(6));
-    const juce::StringArray shots{"vivaldi", "mozart", "tchaikovsky", "debussy", "part", "herrmann", "zimmer", "artemyev"};
+    const juce::StringArray shots{"vivaldi", "mozart", "tchaikovsky", "debussy", "part", "herrmann", "zimmer", "artemyev",
+                                  "baroque-stacc", "hollywood-leg"};
     int styleFails = 0;
     for (int st = 0; st < strings::NUM_COMPOSERS; ++st) {
         juce::String tag = strings::composerId((strings::Composer)st);

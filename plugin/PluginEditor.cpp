@@ -1,4 +1,5 @@
 #include "PluginEditor.h"
+#include "Logo.h"
 
 namespace {
 constexpr int kTop = 56, kSide = 268;
@@ -95,6 +96,10 @@ StringsEditor::StringsEditor(StringsProcessor& p) : AudioProcessorEditor(p), pro
     titleLbl.setText("Strings Arranger", juce::dontSendNotification);
     titleLbl.setFont(ui::font(16.0f, true));
     addAndMakeVisible(titleLbl);
+    if (auto xml = juce::XmlDocument::parse(juce::String(strings::kLogoSvg))) {
+        logo = juce::Drawable::createFromSVG(*xml);
+        if (logo) addAndMakeVisible(*logo);
+    }
     sourceLbl.setFont(ui::font(12.5f));
     sourceLbl.setColour(juce::Label::textColourId, ui::textDim);
     sourceLbl.setJustificationType(juce::Justification::centredLeft);
@@ -146,9 +151,11 @@ StringsEditor::StringsEditor(StringsProcessor& p) : AudioProcessorEditor(p), pro
     StringsLook::sectionLabel(libraryLbl, U("Библиотека"));
     StringsLook::sectionLabel(complexityLbl, U("Сложность"));
     StringsLook::sectionLabel(voicesLbl, U("По партиям"));
+    StringsLook::sectionLabel(livelinessLbl, U("Живость"));
     StringsLook::sectionLabel(variantsLbl, U("Варианты"));
     StringsLook::sectionLabel(soundLbl, U("Звук прослушивания"));
-    for (auto* l : {&inputLbl, &styleLbl, &sectionLbl, &libraryLbl, &complexityLbl, &voicesLbl, &variantsLbl, &soundLbl})
+    for (auto* l : {&inputLbl, &styleLbl, &sectionLbl, &libraryLbl, &complexityLbl, &voicesLbl, &livelinessLbl,
+                    &variantsLbl, &soundLbl})
         addAndMakeVisible(l);
     sectionVal.setFont(ui::font(12.0f));
     sectionVal.setColour(juce::Label::textColourId, ui::textDim);
@@ -193,6 +200,13 @@ StringsEditor::StringsEditor(StringsProcessor& p) : AudioProcessorEditor(p), pro
     addAndMakeVisible(complexity);
     complexityA = std::make_unique<SA>(proc.params, "complexity", complexity);
     valueLabel(complexityVal);
+    liveliness.setSliderStyle(juce::Slider::LinearHorizontal);
+    liveliness.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+    liveliness.setTooltip(U("0 — как задумано в стиле. Больше нуля — живее: лёгкий разброс громкости и времени атаки, "
+                            "глубже фразировка. Меньше нуля — ровнее и механичнее"));
+    addAndMakeVisible(liveliness);
+    livelinessA = std::make_unique<SA>(proc.params, "liveliness", liveliness);
+    valueLabel(livelinessVal);
     for (int i = 0; i < strings::NPARTS; ++i) {
         voice[i].setSliderStyle(juce::Slider::LinearHorizontal);
         voice[i].setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
@@ -319,6 +333,11 @@ void StringsEditor::timerCallback() {
     playBtn.getProperties().set("icon", pv ? "stop" : "play");
     roll.setPlayhead(pv ? proc.previewPositionTicks() : -1.0);
     complexityVal.setText(juce::String((int)complexity.getValue()), juce::dontSendNotification);
+    {
+        int lv = (int)liveliness.getValue();
+        livelinessVal.setText(lv == 0 ? juce::String("0") : (lv > 0 ? "+" : "") + juce::String(lv),
+                              juce::dontSendNotification);
+    }
     for (int i = 0; i < strings::NPARTS; ++i)
         voiceVal[i].setText(voice[i].getValue() < 0 ? juce::String("=") : juce::String((int)voice[i].getValue()),
                             juce::dontSendNotification);
@@ -339,6 +358,12 @@ void StringsEditor::resized() {
     auto b = getLocalBounds();
     auto top = b.removeFromTop(kTop).reduced(18, 12);
     titleLbl.setBounds(top.removeFromLeft(140));
+    if (logo) {
+        // the wordmark only shows once the header has room for it past the title and the buttons
+        int logoW = juce::jlimit(0, 150, top.getWidth() - 660);
+        logo->setVisible(logoW > 24);
+        if (logoW > 24) logo->setTransformToFit(top.removeFromRight(logoW).toFloat(), juce::RectanglePlacement::centred);
+    }
     scoreBtn.setBounds(top.removeFromRight(84));
     top.removeFromRight(6);
     exportBtn.setBounds(top.removeFromRight(84));
@@ -406,6 +431,12 @@ void StringsEditor::resized() {
             voice[i].setBounds(vr.reduced(4, 0));
         }
     }
+    side.removeFromTop(12);
+    auto lrow = side.removeFromTop(14);
+    livelinessVal.setBounds(lrow.removeFromRight(30));
+    livelinessLbl.setBounds(lrow);
+    side.removeFromTop(4);
+    liveliness.setBounds(side.removeFromTop(22));
 
     auto main = b.reduced(18, 0).withTrimmedTop(16).withTrimmedBottom(14);
     auto rep = main.removeFromBottom(proc.result().issues.size() > 1 ? 150 : 122);

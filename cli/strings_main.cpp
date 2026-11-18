@@ -1,7 +1,7 @@
 // Command-line front end of the strings engine; every automatic check goes through it.
 //   strings_cli in.mid [out.mid] [--style=mozart] [--complexity=4|V1=0,V2=6,Va=4,Vc=4,Cb=4]
 //               [--section=auto|quartet|baroque|classical|romantic|symphonic]
-//               [--library=none|uacc|split|bbcso] [--no-dynamics] [--variant=N]
+//               [--library=none|uacc|split|bbcso] [--no-dynamics] [--variant=N] [--live=-10..10]
 //               [--input=auto|chords|harmonize] [--xml=score.musicxml] [--dump] [--list]
 #include <cstdio>
 #include <cstring>
@@ -16,7 +16,7 @@ int main(int argc, char** argv) {
     std::vector<std::string> pos;
     std::string style = "mozart", cx = "4", section = "auto", library = "none", input = "auto", xml;
     bool dump = false, dynamics = true;
-    int variant = 0;
+    int variant = 0, live = 0;
     for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];
         auto val = [&](const char* k) { return a.substr(std::strlen(k)); };
@@ -26,6 +26,7 @@ int main(int argc, char** argv) {
         else if (a.rfind("--library=", 0) == 0) library = val("--library=");
         else if (a.rfind("--input=", 0) == 0) input = val("--input=");
         else if (a.rfind("--variant=", 0) == 0) variant = std::stoi(val("--variant="));
+        else if (a.rfind("--live=", 0) == 0) live = std::stoi(val("--live="));
         else if (a.rfind("--xml=", 0) == 0) xml = val("--xml=");
         else if (a == "--no-dynamics") dynamics = false;
         else if (a == "--dump") dump = true;
@@ -62,6 +63,7 @@ int main(int argc, char** argv) {
     for (int k = 0; k < 6; ++k)
         if (section == secs[k]) s.section = (Section)k;
     s.variant = variant;
+    s.liveliness = live;
     s.input = input == "chords" ? InputMode::Chords : input == "harmonize" ? InputMode::HarmonizeMelody : InputMode::Auto;
 
     std::vector<Note> notes;

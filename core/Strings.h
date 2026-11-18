@@ -38,6 +38,9 @@ struct Settings {
     Section section = Section::Auto;
     InputMode input = InputMode::Auto;
     int variant = 0;
+    int liveliness = 0;        // -10..10, "Живость": 0 plays the style exactly as composed, positive adds
+                                // humanize (velocity and micro-timing jitter, deeper phrase dynamics), negative
+                                // flattens the phrase dynamics toward a mechanical read
     std::map<std::string, std::vector<Note>> locks;           // finished parts kept as they are
     std::map<std::string, std::vector<Note>> skeletonLocks;   // their lines in the four-voice skeleton
 };
@@ -56,6 +59,7 @@ struct Result : choir::Result {
     std::string sectionLabel;            // "6-6-4-3-2"
     std::string manner;                  // what the style does, one line
     int dynamics = 0;                    // phrase dynamics shape of the style (Strings.cpp)
+    int liveliness = 0;                  // the -10..10 the settings asked for, carried to writeMidi
     bool quartet = false;
     std::string report() const;
 };

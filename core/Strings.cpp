@@ -102,6 +102,8 @@ struct Row {
     int mel;                      // register of the melody: -1 low, 0, +1 high
     int spacing;                  // 0 normal, 1 close, 2 wide
     int vel;                      // overall loudness offset
+    bool extreme = false;         // generic era archetype: plainest possible at complexity 1, most
+                                   // exaggerated at complexity 10 (named composers stay moderate throughout)
 };
 
 const Section SQ = Section::Quartet, SB = Section::Baroque, SC = Section::Classical, SR = Section::Romantic,
@@ -110,6 +112,10 @@ const Section SQ = Section::Quartet, SB = Section::Baroque, SC = Section::Classi
 // Every row is one composer: what the skeleton may do, and for each part which texture it takes from which
 // complexity level. The order is the order of the style menu and is saved in projects: add rows at the end
 // of the table only (the menu groups them by the `group` text, wherever they stand).
+// Each era has five named composers that are tuned to be recognizable, and four generic archetypes
+// (staccato, legato, mixed, broken chords) that are not: they are the plainest the engine can be at
+// complexity 1 and the most exaggerated at complexity 10, further than any named style swings
+// (Row::extreme, read in arrange()). A newcomer with no favourite composer picks an archetype by ear.
 const Row ROWS[] = {
     // ------------------------------------------------------------------ baroque
     {"corelli", "Корелли", "Барокко", FUNC, SB,
@@ -118,14 +124,21 @@ const Row ROWS[] = {
      {"0:sus 7:rep16", "0:sus 3:rep8 6:osc16", "0:sus 3:rep8 9:rep16", "0:sus 2:det 5:rep8", "0:dbl"}, 4, false, false, false, 0, 0, 0},
     {"purcell", "Пёрселл", "Барокко", FUNC, SB,
      {"0:sus", "0:sus 6:dot", "0:sus 4:dot", "0:sus 2:det 7:dot", "0:dbl"}, 7, false, false, false, 0, 0, 0},
-    {"telemann", "Телеман", "Барокко", FUNC, SB,
-     {"0:sus", "0:sus 3:sh", "0:sus 4:rep8", "0:sus 2:det 7:walk", "0:dbl"}, 5, false, false, false, 0, 0, 0},
     {"bach", "Бах", "Барокко", FUNC, SB,
      {"0:sus", "0:sus", "0:sus", "0:sus", "0:dbl"}, 10, false, false, false, 0, 0, 0},
     {"handel", "Гендель", "Барокко", FUNC, SB,
      {"0:sus 6:dot", "0:sus 3:dot", "0:sus 3:dot", "0:sus 2:det 5:walk", "0:dbl"}, 5, false, true, false, 0, 0, 6},
-    {"rameau", "Рамо", "Барокко", FUNC, SB,
-     {"0:sus", "0:sus 3:off", "0:sus 3:off", "0:sus 2:det 6:dot", "0:dbl"}, 6, false, false, false, 0, 0, 0},
+    {"baroque-stacc", "Барокко, стаккато", "Барокко", FUNC, SB,
+     {"0:sus 1:det 3:rep8 6:rep16", "0:sus 1:det 3:rep8 6:rep16", "0:sus 1:det 3:rep8 6:rep16",
+      "0:sus 1:det 3:walk 6:rep8", "0:dbl"}, 10, false, true, true, 0, 0, 0, true},
+    {"baroque-leg", "Барокко, легато", "Барокко", FUNC, SB,
+     {"0:sus", "0:sus", "0:sus", "0:sus", "0:dbl"}, 10, true, false, false, 0, 0, 0, true},
+    {"baroque-mix", "Барокко, смешанный", "Барокко", FUNC, SB,
+     {"0:sus 2:det 5:rep8", "0:sus 2:det 5:rep8", "0:sus 2:det 5:walk",
+      "0:sus 1:det 4:walk 7:rep8", "0:dbl 4:rpizz"}, 9, true, true, false, 0, 0, 0, true},
+    {"baroque-arp", "Барокко, арпеджио", "Барокко", FUNC, SB,
+     {"0:sus 2:arp8 6:arp16", "0:sus 2:arp8 6:arp16", "0:sus 2:arp8", "0:sus 2:det 6:walk", "0:dbl"},
+     8, true, false, false, 0, 0, 0, true},
     // ------------------------------------------------------------------ classical
     {"haydn", "Гайдн", "Классицизм", FUNC, SC,
      {"0:sus", "0:sus 3:rep8", "0:sus 4:rep8", "0:sus 2:det 8:rep8", "0:dbl"}, 6, false, false, false, 0, 0, 0},
@@ -137,32 +150,40 @@ const Row ROWS[] = {
      {"0:sus 8:oct", "0:sus 3:rep8 6:rep16", "0:sus 3:rep8 7:rep16", "0:sus 2:det 5:rep8", "0:dbl"}, 5, false, true, false, 0, 0, 6},
     {"beethoven-late", "Бетховен, поздние квартеты", "Классицизм", FUNC, SQ,
      {"0:sus", "0:sus 6:syn", "0:sus", "0:sus", "0:dbl"}, 9, true, false, false, 0, 2, -4},
+    {"classical-stacc", "Классицизм, стаккато", "Классицизм", FUNC, SC,
+     {"0:sus 1:det 3:rep8 6:rep16", "0:sus 1:det 3:rep8 6:rep16", "0:sus 1:det 4:rep8",
+      "0:sus 1:det 4:rep8", "0:dbl"}, 10, false, true, true, 0, 0, 0, true},
+    {"classical-leg", "Классицизм, легато", "Классицизм", FUNC, SC,
+     {"0:sus", "0:sus", "0:sus", "0:sus", "0:dbl"}, 10, true, false, false, 0, 0, 0, true},
+    {"classical-mix", "Классицизм, смешанный", "Классицизм", FUNC, SC,
+     {"0:sus 3:rep8", "0:sus 1:alb8 5:alb16", "0:sus 2:rep8", "0:sus 1:det 5:walk", "0:dbl"},
+     8, true, false, false, 0, 0, 0, true},
+    {"classical-arp", "Классицизм, арпеджио", "Классицизм", FUNC, SC,
+     {"0:sus 2:arp8 6:arp16", "0:sus 2:arp8 6:arp16", "0:sus 2:arp8", "0:sus 2:det", "0:dbl"},
+     8, true, false, false, 0, 0, 0, true},
     // ------------------------------------------------------------------ romantic
-    {"schubert", "Шуберт", "Романтизм", FUNC, SC,
-     {"0:sus", "0:sus 3:rep8 8:trem", "0:sus 3:rep8", "0:sus 4:pizz", "0:dbl 3:rpizz"}, 6, true, false, false, 0, 0, -4},
-    {"mendelssohn", "Мендельсон", "Романтизм", FUNC, SC,
-     {"0:sus", "0:sus 3:rep8 5:rep16", "0:sus 4:rep16", "0:sus 3:pizz", "0:dbl 3:rpizz"}, 7, true, false, false, 1, 0, -8},
-    {"schumann", "Шуман", "Романтизм", FUNC, SR,
-     {"0:sus", "0:sus 3:syn", "0:sus 3:syn 7:rep8", "0:sus 5:arp8", "0:dbl 4:rpizz"}, 7, true, false, false, 0, 0, 0},
     {"brahms", "Брамс", "Романтизм", FUNC, SR,
      {"0:sus 8:oct", "0:sus 3:sh", "0:sus 4:syn", "0:sus 5:arp8", "0:dbl 4:rpizz"}, 6, true, false, false, -1, 1, 2},
-    {"bruckner", "Брукнер", "Романтизм", FUNC, SS,
-     {"0:sus 5:trem", "0:sus 2:trem", "0:sus 3:trem", "0:sus", "0:dbl 3:rpizz"}, 4, true, false, false, 0, 2, 0},
     {"wagner", "Вагнер", "Романтизм", LUSH, SS,
      {"0:sus 7:oct", "0:sus", "0:sus 5:trem", "0:sus", "0:roots"}, 9, true, false, false, 1, 2, 0},
     {"dvorak", "Дворжак", "Романтизм", FUNC, SR,
      {"0:sus 8:oct", "0:sus 3:off", "0:sus 3:off 7:rep8", "0:sus 3:pizz 8:arp8", "0:dbl 3:rpizz"}, 6, true, false, false, 0, 0, 0},
-    {"grieg", "Григ", "Романтизм", FUNC, SR,
-     {"0:sus", "0:sus 3:sh", "0:sus 4:off", "0:sus 3:pizz", "0:dbl 2:drone"}, 6, true, false, false, 0, 0, -2},
     {"mahler", "Малер", "Романтизм", FUNC, SS,
      {"0:sus", "0:sus", "0:sus 4:parp", "0:sus", "0:roots 3:rpizz"}, 9, true, false, false, 1, 2, -8},
-    {"elgar", "Элгар", "Романтизм", FUNC, SR,
-     {"0:sus 7:oct", "0:sus 4:syn", "0:sus 4:arp8", "0:sus", "0:dbl 3:rpizz"}, 7, true, false, false, 0, 0, 0},
-    {"strauss", "Рихард Штраус", "Романтизм", LUSH, SS,
-     {"0:sus 6:oct", "0:sus", "0:sus", "0:sus", "0:roots"}, 10, true, false, false, 0, 2, 0},
+    {"schumann", "Шуман", "Романтизм", FUNC, SR,
+     {"0:sus", "0:sus 3:syn", "0:sus 3:syn 7:rep8", "0:sus 5:arp8", "0:dbl 4:rpizz"}, 7, true, false, false, 0, 0, 0},
+    {"romantic-stacc", "Романтизм, стаккато", "Романтизм", LUSH, SS,
+     {"0:sus 1:rep8 5:rep16", "0:sus 1:rep8 5:rep16", "0:sus 1:syn 5:rep8", "0:sus 1:pizz 5:arp8", "0:dbl 3:rpizz"},
+     9, false, true, false, 0, 1, 0, true},
+    {"romantic-leg", "Романтизм, легато", "Романтизм", LUSH, SS,
+     {"0:sus", "0:sus", "0:sus", "0:sus", "0:roots"}, 10, true, false, false, 0, 2, 0, true},
+    {"romantic-mix", "Романтизм, смешанный", "Романтизм", FUNC, SR,
+     {"0:sus 2:syn 6:oct", "0:sus 2:sh 6:syn", "0:sus 2:syn 6:arp8", "0:sus 2:pizz 6:arp8", "0:dbl 4:rpizz"},
+     8, true, false, false, 0, 1, 0, true},
+    {"romantic-arp", "Романтизм, арпеджио", "Романтизм", LUSH, SR,
+     {"0:sus 2:arp8 6:arp16", "0:sus 2:arp8 6:arp16", "0:sus 2:arp8", "0:sus 2:pizz 6:arp8", "0:dbl 3:rpizz"},
+     8, true, false, false, 0, 1, 0, true},
     // ------------------------------------------------------------------ russian school
-    {"glinka", "Глинка", "Русская школа", FUNC, SC,
-     {"0:sus", "0:sus 3:off", "0:sus 3:rep8", "0:sus 3:pizz", "0:dbl 3:rpizz"}, 5, false, false, false, 0, 0, 0},
     {"borodin", "Бородин", "Русская школа", FUNC, SR,
      {"0:sus", "0:sus 3:syn", "0:sus 3:syn", "0:sus", "0:dbl 2:drone"}, 9, true, false, false, 0, 0, -2},
     {"mussorgsky", "Мусоргский", "Русская школа", MODAL, SS,
@@ -171,12 +192,19 @@ const Row ROWS[] = {
      {"0:sus 7:oct", "0:sus 3:trem 8:rep16", "0:sus 4:trem", "0:sus 5:arp8", "0:dbl 3:rpizz"}, 6, true, false, false, 0, 0, 0},
     {"tchaikovsky", "Чайковский", "Русская школа", FUNC, SS,
      {"0:sus 6:oct", "0:sus 4:off", "0:sus 4:off 8:arp8", "0:sus", "0:dbl 3:rpizz"}, 8, true, false, false, 0, 0, 0},
-    {"glazunov", "Глазунов", "Русская школа", FUNC, SS,
-     {"0:sus 7:oct", "0:sus 3:sh", "0:sus 4:off", "0:sus 5:arp8", "0:dbl 3:rpizz"}, 7, true, false, false, 0, 0, 0},
     {"rachmaninoff", "Рахманинов", "Русская школа", LUSH, SS,
      {"0:sus 5:oct", "0:sus 4:syn", "0:sus 4:syn 8:arp8", "0:sus", "0:roots"}, 9, true, false, false, 0, 0, 2},
-    {"scriabin", "Скрябин", "Русская школа", COLOR, SS,
-     {"0:sus 6:trem", "0:sus 3:trem", "0:sus 4:arp16", "0:sus", "0:roots"}, 6, true, false, false, 1, 2, -4},
+    {"russian-stacc", "Русская школа, стаккато", "Русская школа", FUNC, SS,
+     {"0:sus 1:rep8 5:trem 8:rep16", "0:sus 1:rep8 5:trem", "0:sus 1:det 5:trem", "0:sus 2:arp8", "0:dbl 3:rpizz"},
+     9, false, true, false, 0, 0, 0, true},
+    {"russian-leg", "Русская школа, легато", "Русская школа", FUNC, SS,
+     {"0:sus", "0:sus", "0:sus", "0:sus", "0:roots"}, 10, true, false, false, 0, 1, 0, true},
+    {"russian-mix", "Русская школа, смешанный", "Русская школа", FUNC, SS,
+     {"0:sus 2:oct 6:syn", "0:sus 2:syn 6:off", "0:sus 2:off 6:arp8", "0:sus 2:pizz", "0:dbl 2:drone"},
+     8, true, false, false, 0, 0, 0, true},
+    {"russian-arp", "Русская школа, арпеджио", "Русская школа", LUSH, SS,
+     {"0:sus 2:arp8 6:arp16", "0:sus 2:arp8 6:arp16", "0:sus 2:arp16", "0:sus 2:pizz 6:arp8", "0:roots"},
+     8, true, false, false, 0, 0, 0, true},
     // ------------------------------------------------------------------ france
     {"berlioz", "Берлиоз", "Франция", FUNC, SS,
      {"0:sus", "0:sus 3:trem 7:rep16", "0:sus 3:rep8", "0:sus 4:pizz", "0:dbl 3:rpizz"}, 5, false, true, false, 0, 0, 4},
@@ -188,31 +216,39 @@ const Row ROWS[] = {
      {"0:sus", "0:sus 2:sh 7:trem", "0:sus 3:sh2", "0:sus 4:arp16", "0:roots 3:rpizz"}, 4, true, false, false, 1, 2, -8},
     {"ravel", "Равель", "Франция", LUSH, SS,
      {"0:sus 7:oct", "0:sus 3:arp16", "0:sus 3:parp", "0:sus 4:pizz", "0:dbl 3:rpizz"}, 5, true, false, false, 0, 0, -2},
+    {"france-stacc", "Франция, стаккато", "Франция", COLOR, SR,
+     {"0:sus 1:parp 5:arp16", "0:sus 1:parp 5:arp16", "0:sus 1:parp", "0:sus 1:pizz 5:parp", "0:dbl 3:rpizz"},
+     7, false, false, false, 0, 0, -4, true},
+    {"france-leg", "Франция, легато", "Франция", LUSH, SS,
+     {"0:sus", "0:sus", "0:sus", "0:sus", "0:roots"}, 10, true, false, false, 0, 2, -4, true},
+    {"france-mix", "Франция, смешанный", "Франция", COLOR, SR,
+     {"0:sus 2:sh 6:trem", "0:sus 2:arp8", "0:sus 2:sh2 6:arp16", "0:sus 2:pizz 6:arp8", "0:roots 3:rpizz"},
+     6, true, false, false, 0, 1, -4, true},
+    {"france-arp", "Франция, арпеджио", "Франция", LUSH, SR,
+     {"0:sus 2:arp8 6:arp16", "0:sus 2:arp8 6:arp16", "0:sus 2:parp", "0:sus 2:pizz", "0:roots"},
+     6, true, false, false, 0, 1, -4, true},
     // ------------------------------------------------------------------ twentieth century
     {"sibelius", "Сибелиус", "XX век", FUNC, SS,
      {"0:sus", "0:sus 2:osc8 6:osc16", "0:sus 3:osc8 7:trem", "0:sus", "0:drone"}, 4, true, false, false, 0, 0, -4},
-    {"schoenberg", "Шёнберг, «Просветлённая ночь»", "XX век", LUSH, SR,
-     {"0:sus", "0:sus 4:trem", "0:sus", "0:sus", "0:roots"}, 10, true, false, false, 1, 2, -2},
-    {"janacek", "Яначек", "XX век", COLOR, SR,
-     {"0:sus", "0:sus 3:osc16", "0:sus 3:ost", "0:sus 4:stab", "0:dbl"}, 3, false, true, false, 1, 0, 2},
     {"stravinsky", "Стравинский, русский период", "XX век", COLOR, SS,
      {"0:sus 4:aug", "0:sus 3:aug", "0:sus 3:aug", "0:sus 3:aug", "0:dbl"}, 3, false, false, true, 0, 0, 6},
-    {"stravinsky-neo", "Стравинский, неоклассика", "XX век", FUNC, SC,
-     {"0:sus 6:dot", "0:sus 3:rep8", "0:sus 3:off", "0:sus 2:pizz", "0:dbl 2:rpizz"}, 3, false, false, true, 0, 0, 0},
     {"bartok", "Барток", "XX век", COLOR, SR,
      {"0:sus", "0:sus 3:ost", "0:sus 3:ost", "0:sus 3:pizz", "0:dbl 3:rpizz"}, 3, false, true, true, 0, 0, 4},
     {"prokofiev", "Прокофьев", "XX век", FUNC, SS,
      {"0:sus 7:oct", "0:sus 3:rep8", "0:sus 3:off", "0:sus 2:pizz 7:rep8", "0:dbl 2:rpizz"}, 4, false, true, false, 0, 0, 2},
     {"shostakovich", "Шостакович", "XX век", FUNC, SS,
      {"0:sus", "0:sus 3:uni", "0:sus 3:rep8 7:rep16", "0:sus 4:rep8", "0:dbl 2:drone"}, 3, false, true, false, 0, 0, 2},
-    {"vaughan-williams", "Воан-Уильямс", "XX век", MODAL, SS,
-     {"0:sus", "0:sus 2:sh", "0:sus 3:sh2", "0:sus", "0:roots 4:drone"}, 4, true, false, false, 1, 2, -8},
-    {"barber", "Барбер", "XX век", COLOR, SR,
-     {"0:sus", "0:sus", "0:sus", "0:sus", "0:roots"}, 10, true, false, false, 0, 0, -8},
-    {"britten", "Бриттен", "XX век", COLOR, SC,
-     {"0:sus", "0:sus 3:parp", "0:sus 3:parp", "0:sus 3:pizz", "0:dbl 3:rpizz"}, 4, false, false, false, 0, 0, 0},
-    {"schnittke", "Шнитке", "XX век", FUNC, SC,
-     {"0:sus", "0:sus 3:rep8 6:trem", "0:sus 3:rep8", "0:sus 2:det 5:walk", "0:dbl"}, 5, false, true, true, 0, 0, 0},
+    {"xx-stacc", "XX век, стаккато", "XX век", COLOR, SS,
+     {"0:sus 1:stab 5:aug", "0:sus 1:stab 5:aug", "0:sus 1:stab 5:aug", "0:sus 1:stab 5:aug", "0:dbl"},
+     3, false, false, true, 0, 0, 4, true},
+    {"xx-leg", "XX век, легато", "XX век", COLOR, SR,
+     {"0:sus", "0:sus", "0:sus", "0:sus", "0:roots"}, 10, true, false, false, 0, 2, -4, true},
+    {"xx-mix", "XX век, смешанный", "XX век", COLOR, SS,
+     {"0:sus 2:ost 6:rep16", "0:sus 2:ost 6:rep16", "0:sus 2:ost 6:rep16", "0:sus 2:pizz 6:rep8", "0:dbl 2:rpizz"},
+     4, false, true, true, 0, 0, 0, true},
+    {"xx-arp", "XX век, арпеджио", "XX век", COLOR, SR,
+     {"0:sus 2:arp8 6:arp16", "0:sus 2:arp8 6:arp16", "0:sus 2:arp16", "0:sus 2:pizz", "0:dbl"},
+     5, true, false, false, 0, 0, 0, true},
     // ------------------------------------------------------------------ minimalism
     {"part", "Пярт", "Минимализм", MODAL, SR,
      {"0:sus", "0:sus 1:tin", "0:sus 3:tin2", "0:sus", "0:drone"}, 0, true, false, false, 0, 0, -10},
@@ -222,69 +258,66 @@ const Row ROWS[] = {
      {"0:sus", "0:sus 2:osc8", "0:sus 2:alb8 6:alb16", "0:sus 4:osc8", "0:roots"}, 0, true, false, false, 0, 0, -2},
     {"nyman", "Найман", "Минимализм", FUNC, SC,
      {"0:sus 6:oct", "0:sus 2:rep8", "0:sus 2:rep8", "0:sus 2:rep8", "0:dbl"}, 1, false, true, false, 0, 0, 8},
+    {"reich", "Райх", "Минимализм", MODAL, SC,
+     {"0:sus 2:rep8", "0:sus 2:osc8", "0:sus 2:rep8 6:rep16", "0:sus 3:osc8", "0:roots"}, 1, false, false, false, 0, 0, 0},
+    {"minimalism-stacc", "Минимализм, стаккато", "Минимализм", MODAL, SC,
+     {"0:sus 1:rep8 5:rep16", "0:sus 1:rep8 5:rep16", "0:sus 1:alb8 5:alb16", "0:sus 1:rep8", "0:dbl"},
+     1, false, true, false, 0, 0, 6, true},
+    {"minimalism-leg", "Минимализм, легато", "Минимализм", MODAL, SR,
+     {"0:sus", "0:sus", "0:sus", "0:sus 1:tin 5:tin2", "0:drone"}, 0, true, false, false, 0, 0, -6, true},
+    {"minimalism-mix", "Минимализм, смешанный", "Минимализм", MODAL, SC,
+     {"0:sus 1:osc8 5:osc16", "0:sus 1:osc8 5:osc16", "0:sus 1:alb8 5:alb16", "0:sus 1:osc8", "0:roots"},
+     0, true, false, false, 0, 0, -2, true},
+    {"minimalism-arp", "Минимализм, арпеджио", "Минимализм", MODAL, SC,
+     {"0:sus 1:arp8 5:arp16", "0:sus 1:arp8 5:arp16", "0:sus 1:arp8", "0:sus 1:parp", "0:roots"},
+     0, true, false, false, 0, 0, -2, true},
     // ------------------------------------------------------------------ soviet film
-    {"dunaevsky", "Дунаевский", "Советское кино", FUNC, SS,
-     {"0:sus 6:oct", "0:sus 3:off", "0:sus 3:off", "0:sus 3:pizz", "0:dbl 2:rpizz"}, 6, false, true, false, 0, 0, 4},
-    {"schwartz", "Шварц", "Советское кино", FUNC, SR,
-     {"0:sus", "0:sus 4:sh", "0:sus 3:arp8", "0:sus", "0:dbl 3:rpizz"}, 5, true, false, false, 0, 0, -6},
     {"sviridov", "Свиридов", "Советское кино", FUNC, SS,
      {"0:sus 6:oct", "0:sus 3:rep8", "0:sus 3:rep8 8:rep16", "0:sus 4:arp8", "0:dbl 3:rpizz"}, 5, true, false, false, 0, 0, 0},
     {"petrov", "Андрей Петров", "Советское кино", LUSH, SR,
      {"0:sus 5:oct", "0:sus 3:off", "0:sus 3:off", "0:sus 3:pizz", "0:dbl 2:rpizz"}, 4, true, false, false, 0, 0, -2},
     {"tariverdiev", "Таривердиев", "Советское кино", LUSH, SC,
      {"0:sus", "0:sus", "0:sus 3:alb8", "0:sus 5:walk", "0:dbl 3:rpizz"}, 5, true, false, false, 0, 0, -6},
-    {"zatsepin", "Зацепин", "Советское кино", LUSH, SR,
-     {"0:sus 6:oct", "0:sus 3:syn", "0:sus 3:syn", "0:sus 3:walk", "0:dbl 3:rpizz"}, 4, false, true, false, 0, 0, 2},
-    {"gladkov", "Гладков", "Советское кино", LUSH, SC,
-     {"0:sus", "0:sus 3:off", "0:sus 3:parp", "0:sus 2:pizz", "0:dbl 2:rpizz"}, 4, false, false, false, 0, 0, 0},
-    {"rybnikov", "Рыбников", "Советское кино", FUNC, SR,
-     {"0:sus 6:oct", "0:sus 4:arp8", "0:sus 3:rep8", "0:sus", "0:roots"}, 4, true, false, false, 0, 0, 0},
     {"artemyev", "Артемьев", "Советское кино", COLOR, SS,
      {"0:sus", "0:sus 6:trem", "0:sus 4:ost", "0:sus", "0:drone"}, 2, true, false, false, 0, 2, -6},
-    {"dashkevich", "Дашкевич", "Советское кино", FUNC, SC,
-     {"0:sus", "0:sus 3:dot", "0:sus 3:rep8", "0:sus 2:det 5:walk", "0:dbl"}, 5, false, true, false, 0, 0, 2},
-    {"krylatov", "Крылатов", "Советское кино", FUNC, SR,
-     {"0:sus 6:oct", "0:sus 3:sh", "0:sus 3:arp8", "0:sus", "0:roots 4:rpizz"}, 5, true, false, false, 1, 0, -2},
     {"doga", "Дога", "Советское кино", FUNC, SS,
      {"0:sus 4:oct", "0:sus 3:off", "0:sus 3:off", "0:sus 3:pizz 7:arp8", "0:dbl 2:rpizz"}, 5, true, false, false, 0, 0, 6},
+    {"soviet-stacc", "Советское кино, стаккато", "Советское кино", FUNC, SS,
+     {"0:sus 1:off 5:rep8", "0:sus 1:off 5:rep8", "0:sus 1:off 5:arp8", "0:sus 1:pizz 5:walk", "0:dbl 2:rpizz"},
+     6, false, true, false, 0, 0, 2, true},
+    {"soviet-leg", "Советское кино, легато", "Советское кино", FUNC, SR,
+     {"0:sus 6:oct", "0:sus", "0:sus", "0:sus", "0:dbl"}, 9, true, false, false, 0, 0, -2, true},
+    {"soviet-mix", "Советское кино, смешанный", "Советское кино", FUNC, SR,
+     {"0:sus 2:syn 6:oct", "0:sus 2:sh 6:syn", "0:sus 2:arp8", "0:sus 2:walk", "0:dbl 3:rpizz"},
+     6, true, false, false, 0, 0, 0, true},
+    {"soviet-arp", "Советское кино, арпеджио", "Советское кино", LUSH, SR,
+     {"0:sus 2:arp8 6:arp16", "0:sus 2:arp8 6:arp16", "0:sus 2:arp8", "0:sus 2:walk", "0:dbl"},
+     6, true, false, false, 0, 0, 0, true},
     // ------------------------------------------------------------------ hollywood and world cinema
-    {"steiner", "Макс Штайнер", "Голливуд и мировое кино", LUSH, SS,
-     {"0:sus 4:oct", "0:sus 3:trem", "0:sus 4:syn", "0:sus", "0:roots"}, 7, true, false, false, 0, 0, 2},
-    {"korngold", "Корнгольд", "Голливуд и мировое кино", LUSH, SS,
-     {"0:sus 5:oct", "0:sus 3:sh", "0:sus 3:arp16", "0:sus 5:arp8", "0:dbl 3:rpizz"}, 8, true, false, false, 1, 0, 4},
     {"herrmann", "Херрманн", "Голливуд и мировое кино", COLOR, SC,
      {"0:sus 7:trem", "0:sus 3:rep8 8:rep16", "0:sus 3:rep8", "0:sus 4:stab", "0:dbl"}, 3, false, true, false, 0, 1, 2},
-    {"rozsa", "Рожа", "Голливуд и мировое кино", MODAL, SS,
-     {"0:sus 6:oct", "0:sus 3:uni", "0:sus 3:det", "0:sus 3:det", "0:dbl"}, 3, false, true, false, 0, 0, 8},
-    {"bernstein", "Элмер Бернстайн", "Голливуд и мировое кино", FUNC, SS,
-     {"0:sus 6:oct", "0:sus 3:ost", "0:sus 3:ost", "0:sus 3:rep8", "0:dbl 3:rpizz"}, 4, false, true, false, 0, 0, 6},
-    {"goldsmith", "Голдсмит", "Голливуд и мировое кино", COLOR, SS,
-     {"0:sus", "0:sus 3:osc16", "0:sus 3:aug", "0:sus 3:pizz", "0:roots"}, 4, false, true, true, 0, 0, 2},
     {"williams", "Джон Уильямс", "Голливуд и мировое кино", LUSH, SS,
      {"0:sus 5:oct", "0:sus 3:rep16", "0:sus 3:trem", "0:sus 4:rep8", "0:dbl 3:rpizz"}, 8, false, true, false, 0, 0, 6},
-    {"barry", "Джон Барри", "Голливуд и мировое кино", LUSH, SS,
-     {"0:sus 3:oct", "0:sus", "0:sus 5:syn", "0:sus", "0:roots"}, 1, true, false, false, 1, 2, -4},
     {"morricone", "Морриконе", "Голливуд и мировое кино", FUNC, SR,
      {"0:sus", "0:sus 4:sh 7:trem", "0:sus 3:arp8", "0:sus", "0:roots 4:rpizz"}, 5, true, false, false, 1, 0, -4},
-    {"rota", "Нино Рота", "Голливуд и мировое кино", FUNC, SC,
-     {"0:sus 6:trem", "0:sus 3:off", "0:sus 3:off", "0:sus 3:pizz", "0:dbl 2:rpizz"}, 5, true, false, false, 0, 0, -2},
     {"horner", "Хорнер", "Голливуд и мировое кино", COLOR, SS,
      {"0:sus 6:oct", "0:sus 4:osc8", "0:sus 3:rep8", "0:sus", "0:roots 5:drone"}, 4, true, false, false, 0, 0, 0},
-    {"elfman", "Элфман", "Голливуд и мировое кино", FUNC, SR,
-     {"0:sus 7:trem", "0:sus 3:off", "0:sus 3:parp", "0:sus 2:pizz", "0:dbl 2:rpizz"}, 4, false, true, false, 0, 0, 0},
     {"zimmer", "Циммер", "Голливуд и мировое кино", MODAL, SS,
      {"0:sus 8:oct", "0:sus 3:ost", "0:sus 2:rep8 5:ost", "0:sus 4:rep8", "0:roots 6:drone"}, 1, true, true, false, 0, 0, 4},
-    {"shore", "Говард Шор", "Голливуд и мировое кино", MODAL, SS,
-     {"0:sus", "0:sus 3:sh", "0:sus 4:trem", "0:sus", "0:drone"}, 3, true, false, false, 0, 2, 0},
-    {"desplat", "Деспла", "Голливуд и мировое кино", COLOR, SC,
-     {"0:sus", "0:sus 2:osc8", "0:sus 3:parp", "0:sus 3:pizz", "0:dbl 2:rpizz"}, 3, false, false, false, 0, 0, -8},
-    {"newman", "Томас Ньюман", "Голливуд и мировое кино", COLOR, SC,
-     {"0:sus", "0:sus 3:ost", "0:sus", "0:sus 4:pizz", "0:drone"}, 0, true, false, false, 0, 2, -8},
-    {"johannsson", "Йоханнссон", "Голливуд и мировое кино", MODAL, SR,
-     {"0:sus", "0:sus 2:tin", "0:sus", "0:sus 5:osc8", "0:drone"}, 1, true, false, false, -1, 1, -10},
+    {"hollywood-stacc", "Голливуд, стаккато", "Голливуд и мировое кино", COLOR, SS,
+     {"0:sus 1:stab 5:aug", "0:sus 1:rep8 5:rep16", "0:sus 1:ost 5:stab", "0:sus 1:rep8 5:rep16", "0:dbl"},
+     4, false, true, true, 0, 0, 4, true},
+    {"hollywood-leg", "Голливуд, легато", "Голливуд и мировое кино", LUSH, SS,
+     {"0:sus 5:oct", "0:sus", "0:sus", "0:sus", "0:roots"}, 9, true, false, false, 0, 2, 2, true},
+    {"hollywood-mix", "Голливуд, смешанный", "Голливуд и мировое кино", MODAL, SS,
+     {"0:sus 2:ost 6:rep16", "0:sus 2:ost 6:rep16", "0:sus 2:ost 6:arp16", "0:sus 2:pizz 6:walk", "0:roots 5:drone"},
+     5, true, true, false, 0, 0, 0, true},
+    {"hollywood-arp", "Голливуд, арпеджио", "Голливуд и мировое кино", LUSH, SS,
+     {"0:sus 2:arp8 6:arp16", "0:sus 2:arp16", "0:sus 2:arp16", "0:sus 2:arp8", "0:dbl 3:rpizz"},
+     6, true, false, false, 0, 0, 0, true},
 };
 const int NROWS = (int)(sizeof(ROWS) / sizeof(ROWS[0]));
-const Composer DEFAULT_COMPOSER = (Composer)8;   // Mozart
+const Composer DEFAULT_COMPOSER = (Composer)10;   // Mozart
 
 
 // ------------------------------------------------------------------ flavour of a style
@@ -314,84 +347,84 @@ const Flavor FLAVORS[] = {
     {"corelli", H_SEV | H_PIC, D_TERR, "две скрипки над басом, цепи задержаний, контраст громко и тихо", "короткий смычок, лёгкое вибрато"},
     {"vivaldi", H_SEV | H_PIC, D_TERR, "моторные репетиции, бас восьмыми, контраст громко и тихо", nullptr},
     {"purcell", H_PIC, D_TERR, "пунктирные ритмы и строгий бас", nullptr},
-    {"telemann", H_SEV | H_PIC, D_TERR, "галантная лёгкость, вторые скрипки вторят первым", nullptr},
     {"bach", H_SEV | H_PIC, D_TERR, "четыре самостоятельные линии, проходящие ноты и задержания", nullptr},
     {"handel", H_SEV | H_PIC, D_TERR, "французская увертюра: пунктир, акценты, шагающий бас", nullptr},
-    {"rameau", H_SEV, D_TERR, "танцевальные аккорды на слабую долю, пунктир в басу", nullptr},
+    {"baroque-stacc", H_SEV | H_PIC, D_TERR, "обобщённое барокко: деташе растёт к репетициям шестнадцатыми, акценты на сменах гармонии", nullptr},
+    {"baroque-leg", H_SEV | H_PIC, D_ARCH, "обобщённое барокко: только выдержанные голоса, без акцентов и фигураций", nullptr},
+    {"baroque-mix", H_SEV, D_SWELL, "обобщённое барокко: смычковые партии и шагающий бас вперемешку со щипком", nullptr},
+    {"baroque-arp", H_SEV, D_ARCH, "обобщённое барокко: разложенные аккорды восьмыми, затем шестнадцатыми", nullptr},
     {"haydn", H_SEV, D_ARCH, "квартетная ясность, барабанные восьмые в середине", nullptr},
     {"mozart", H_SEV, D_ARCH, "певучая мелодия над альбертиевыми фигурами", nullptr},
     {"boccherini", H_SEV, D_ARCH, "мягкие синкопы, пиццикато контрабасов, тихая звучность", nullptr},
     {"beethoven", H_SEV, D_SWELL, "репетиции шестнадцатыми, sforzando на сменах гармонии", nullptr},
     {"beethoven-late", H_SEV | H_IVM, D_WAVE, "плотная полифония, широкое расположение, синкопы", nullptr},
-    {"schubert", H_SEV | H_IVM, D_ARCH, "репетиции аккордов, мажор и минор рядом, тремоло в кульминации", nullptr},
-    {"mendelssohn", H_SEV, D_ARCH, "лёгкое спиккато, высокий регистр, пиццикато в басах", "спиккато у середины смычка, тихо"},
-    {"schumann", H_SEV | H_IVM, D_SWELL, "беспокойные синкопы, ломаные аккорды у виолончелей", nullptr},
+    {"classical-stacc", H_SEV, D_ARCH, "обобщённый классицизм: деташе растёт к репетициям шестнадцатыми", nullptr},
+    {"classical-leg", H_SEV, D_ARCH, "обобщённый классицизм: ровные выдержанные голоса без фигураций", nullptr},
+    {"classical-mix", H_SEV, D_ARCH, "обобщённый классицизм: альбертиевы фигуры во вторых скрипках под песенной мелодией", nullptr},
+    {"classical-arp", H_SEV, D_ARCH, "обобщённый классицизм: разложенные аккорды, прозрачная фактура", nullptr},
     {"brahms", H_SEV | H_IVM, D_SWELL, "низкий плотный регистр, синкопы, мелодия в октаву", nullptr},
-    {"bruckner", H_SEV, D_SWELL, "тремоло под хоралом, широкие нарастания", nullptr},
     {"wagner", H_IVM, D_SWELL, "хроматическая насыщенность, высокое divisi, долгие нарастания", nullptr},
     {"dvorak", H_SEV, D_ARCH, "танцевальные аккорды на слабую долю, пиццикато баса", nullptr},
-    {"grieg", H_SEV | H_IVM, D_ARCH, "народная педаль в басу, прозрачная фактура", nullptr},
     {"mahler", H_SEV | H_IVM, D_WAVE, "огромные дуги, пиццикато альтов вместо арфы, крайние регистры", "в медленной музыке: портаменто на скачках мелодии"},
-    {"elgar", H_SEV | H_IVM, D_SWELL, "nobilmente: мелодия в октаву, ломаные аккорды альтов", nullptr},
-    {"strauss", H_IVM | H_SIX, D_SWELL, "пышная гармония, широкое расположение, октавы", nullptr},
-    {"glinka", H_SEV, D_ARCH, "ясная классическая фактура под песенной мелодией", nullptr},
+    {"schumann", H_SEV | H_IVM, D_SWELL, "беспокойные синкопы, ломаные аккорды у виолончелей", nullptr},
+    {"romantic-stacc", H_SEV | H_IVM, D_SWELL, "обобщённый романтизм: репетиции растут к шестнадцатым, резкие смены громкости", nullptr},
+    {"romantic-leg", H_SEV | H_IVM | H_SIX, D_SWELL, "обобщённый романтизм: широкое выдержанное звучание, долгие нарастания", nullptr},
+    {"romantic-mix", H_SEV | H_IVM, D_SWELL, "обобщённый романтизм: синкопы и ломаные аккорды вперемешку с пиццикато", nullptr},
+    {"romantic-arp", H_SEV | H_IVM, D_SWELL, "обобщённый романтизм: разложенные аккорды растущей плотности", nullptr},
     {"borodin", H_SEV | H_IVM, D_WAVE, "певучая мелодия над синкопами, педаль в басу", nullptr},
     {"mussorgsky", H_PIC, D_TERR, "модальные трезвучия, тяжёлые унисоны, деташе", nullptr},
     {"rimsky", H_SEV, D_ARCH, "краска: тремоло под темой, ломаные аккорды виолончелей", nullptr},
     {"tchaikovsky", H_SEV | H_IVM, D_SWELL, "мелодия в октаву, аккорды на слабую долю, пиццикато баса", nullptr},
-    {"glazunov", H_SEV | H_IVM, D_SWELL, "плотная романтическая фактура, мелодия в октаву", nullptr},
     {"rachmaninoff", H_IVM | H_SIX, D_SWELL, "широкая мелодия в октаву над синкопами, пышная гармония", nullptr},
-    {"scriabin", H_ADD9, D_WAVE, "мерцание: тремоло, арпеджио, неразрешённые созвучия", "sul tasto в тихих местах"},
+    {"russian-stacc", H_SEV, D_SWELL, "обобщённая русская школа: тремоло и репетиции растут к кульминации", nullptr},
+    {"russian-leg", H_SEV | H_IVM, D_SWELL, "обобщённая русская школа: широкая певучая мелодия, выдержанные голоса", nullptr},
+    {"russian-mix", H_SEV | H_IVM, D_SWELL, "обобщённая русская школа: синкопы и аккорды на слабую долю вперемешку с пиццикато", nullptr},
+    {"russian-arp", H_SEV | H_IVM, D_WAVE, "обобщённая русская школа: разложенные аккорды под песенной мелодией", nullptr},
     {"berlioz", H_SEV, D_SWELL, "контрасты: тремоло, шестнадцатые, акценты", nullptr},
     {"saint-saens", H_SEV, D_ARCH, "французская ясность, ломаные аккорды, пиццикато", nullptr},
     {"faure", H_MAJ7 | H_ADD9, D_ARCH, "текучие ломаные аккорды восьмыми, септаккорды", nullptr},
     {"debussy", H_ADD9 | H_SIX, D_FLAT, "параллельные созвучия под мелодией, тихие арпеджио", "con sordino, sul tasto"},
     {"ravel", H_ADD9 | H_MAJ7, D_ARCH, "прозрачное пиццикато, арпеджио, точные краски", nullptr},
+    {"france-stacc", H_ADD9 | H_MAJ7, D_ARCH, "обобщённая французская школа: пиццикато и разложенные фигуры, прозрачная краска", nullptr},
+    {"france-leg", H_ADD9 | H_SIX, D_FLAT, "обобщённая французская школа: тихие выдержанные созвучия, параллельные краски", nullptr},
+    {"france-mix", H_ADD9, D_ARCH, "обобщённая французская школа: вторящие голоса и разложенные аккорды вперемешку", nullptr},
+    {"france-arp", H_ADD9 | H_MAJ7, D_ARCH, "обобщённая французская школа: прозрачные разложенные аккорды растущей плотности", nullptr},
     {"sibelius", H_SEV, D_WAVE, "покачивание восьмыми, педаль, тремоло в нарастании", nullptr},
-    {"schoenberg", H_IVM | H_SIX, D_SWELL, "позднеромантическая хроматика, тремоло, широкое divisi", nullptr},
-    {"janacek", H_ADD9, D_TERR, "короткие повторяющиеся мотивы, резкие акценты", "sul ponticello на остинато"},
     {"stravinsky", 0, D_TERR, "сбитые акценты, жёсткие аккорды с секундами", "все акценты вниз смычком"},
-    {"stravinsky-neo", H_SEV, D_TERR, "сухие восьмые, пунктир, неоклассическая ясность", "без вибрато, коротко"},
     {"bartok", 0, D_TERR, "остинато, пиццикато, острые акценты", "в кульминации щелчковое пиццикато"},
     {"prokofiev", H_SEV, D_ARCH, "моторные восьмые, пиццикато, мелодия высоко в октаву", nullptr},
     {"shostakovich", 0, D_SWELL, "унисон вторых скрипок с первыми, моторные шестнадцатые, педаль", nullptr},
-    {"vaughan-williams", H_PIC, D_WAVE, "модальные трезвучия, параллельное движение под мелодией", "divisi на два оркестра, второй с сурдиной"},
-    {"barber", 0, D_WAVE, "медленные линии, задержания, долгое нарастание", "в начале без вибрато"},
-    {"britten", 0, D_ARCH, "игривое пиццикато, ясная фактура", nullptr},
-    {"schnittke", H_SEV, D_TERR, "барочная маска: шагающий бас, тремоло, резкие акценты", "тремоло sul ponticello"},
+    {"xx-stacc", 0, D_TERR, "обобщённый XX век: сбитые акценты и резкие удары, диссонирующие созвучия", nullptr},
+    {"xx-leg", H_ADD9, D_WAVE, "обобщённый XX век: модальные выдержанные созвучия, широкое divisi", nullptr},
+    {"xx-mix", 0, D_TERR, "обобщённый XX век: остинато вперемешку с пиццикато и ударами", nullptr},
+    {"xx-arp", H_ADD9, D_TERR, "обобщённый XX век: колкие разложенные аккорды с добавленными тонами", nullptr},
     {"part", 0, D_FLAT, "тинтиннабули: мелодия и тоны тонического трезвучия, педаль тоники", "без вибрато"},
     {"gorecki", 0, D_WAVE, "очень медленные выдержанные линии, низкий регистр", nullptr},
     {"glass", 0, D_FLAT, "повторяющиеся фигуры, ровная динамика", nullptr},
     {"nyman", H_SEV, D_TERR, "пилящие восьмые на барочной гармонии, громко", "маркато на каждой восьмой"},
-    {"dunaevsky", H_SEV, D_ARCH, "марш и оперетта: аккорды на слабую долю, мелодия в октаву", nullptr},
-    {"schwartz", H_SEV | H_IVM, D_WAVE, "романс: певучая мелодия, ломаные аккорды альтов", nullptr},
+    {"reich", 0, D_FLAT, "фазовые паттерны: перекрывающиеся повторы сдвигаются друг относительно друга", "ровно, без акцентов, как метроном"},
+    {"minimalism-stacc", 0, D_TERR, "обобщённый минимализм: пилящие повторы, громко и ровно", nullptr},
+    {"minimalism-leg", 0, D_FLAT, "обобщённый минимализм: тинтиннабули на тонической педали, без вибрато", "без вибрато"},
+    {"minimalism-mix", 0, D_FLAT, "обобщённый минимализм: покачивание и альбертиевы фигуры вперемешку, ровная динамика", nullptr},
+    {"minimalism-arp", 0, D_FLAT, "обобщённый минимализм: разложенные остинато на тонической педали", nullptr},
     {"sviridov", H_SEV | H_IVM, D_SWELL, "пульсирующие аккорды, мелодия в октаву", nullptr},
     {"petrov", H_IVM, D_ARCH, "лирический вальс, мелодия в октаву", nullptr},
     {"tariverdiev", 0, D_FLAT, "сдержанность: фигуры альтов, шагающий бас, септаккорды", nullptr},
-    {"zatsepin", H_SIX, D_ARCH, "лёгкий танец, синкопы, шагающий бас", nullptr},
-    {"gladkov", 0, D_ARCH, "игривые аккорды на слабую долю, пиццикато", nullptr},
-    {"rybnikov", H_SEV | H_IVM, D_SWELL, "лирика рок-оперы: ломаные аккорды, мелодия в октаву", nullptr},
     {"artemyev", H_ADD9 | H_SUS, D_FLAT, "тянущиеся созвучия, педаль, медленное остинато", "flautando, без атаки"},
-    {"dashkevich", H_SEV | H_PIC, D_TERR, "барочная стилизация: пунктир, шагающий бас", nullptr},
-    {"krylatov", H_SEV, D_ARCH, "светлая песенная лирика, пиццикато баса", nullptr},
     {"doga", H_SEV | H_IVM, D_SWELL, "большой вальс: мелодия в октаву уже на средних уровнях", nullptr},
-    {"steiner", H_IVM | H_SIX, D_SWELL, "оркестровая мелодрама: октавы, тремоло, синкопы", "портаменто в мелодии"},
-    {"korngold", H_IVM | H_SIX, D_SWELL, "приключенческая пышность: арпеджио, мелодия высоко", nullptr},
+    {"soviet-stacc", H_SEV, D_ARCH, "обобщённое советское кино: аккорды на слабую долю, растущие к репетициям", nullptr},
+    {"soviet-leg", H_SEV | H_IVM, D_SWELL, "обобщённое советское кино: лирическая мелодия в октаву на вершине сложности", nullptr},
+    {"soviet-mix", H_SEV | H_IVM, D_SWELL, "обобщённое советское кино: синкопы и шагающий бас вперемешку с разложенными аккордами", nullptr},
+    {"soviet-arp", H_SEV, D_ARCH, "обобщённое советское кино: вальсовые разложенные аккорды", nullptr},
     {"herrmann", H_HITCH, D_TERR, "нервные восьмые, тремоло, удары в басах, минор с большой септимой", "con sordino в тихих местах"},
-    {"rozsa", H_PIC, D_SWELL, "эпос: модальные трезвучия, унисоны, деташе", nullptr},
-    {"bernstein", H_SEV, D_SWELL, "американский простор: остинато, мелодия в октаву", nullptr},
-    {"goldsmith", H_SUS, D_TERR, "сбитые акценты, остинато, кварты в аккордах", nullptr},
     {"williams", H_IVM | H_SIX, D_SWELL, "фанфарные октавы, шестнадцатые, тремоло", nullptr},
-    {"barry", 0, D_WAVE, "медленные пышные октавы высоко, синкопы альтов", nullptr},
     {"morricone", H_SEV | H_IVM, D_WAVE, "выдержанная мелодия высоко, тремоло, ломаные аккорды", nullptr},
-    {"rota", H_SEV | H_IVM, D_ARCH, "меланхоличный вальс, тремоло мелодии", nullptr},
     {"horner", H_ADD9 | H_SUS, D_WAVE, "кельтская ширь: sus-аккорды, педаль, мелодия в октаву", nullptr},
-    {"elfman", H_SEV | H_IVM, D_SWELL, "тёмный вальс: аккорды на слабую долю, пиццикато, тремоло", nullptr},
     {"zimmer", 0, D_SWELL, "остинато 3+3+2, педаль, мелодия в октаву в кульминации", "остинато коротким спиккато, акценты сильно"},
-    {"shore", 0, D_SWELL, "модальная эпика: тремоло, педаль, широкое расположение", nullptr},
-    {"desplat", H_ADD9, D_FLAT, "лёгкое покачивание и пиццикато, тихо", nullptr},
-    {"newman", H_ADD9 | H_MAJ7, D_FLAT, "повторяющиеся остинато, педаль, тихая звучность", "col legno на остинато"},
-    {"johannsson", 0, D_FLAT, "медленные педали, тоны трезвучия под мелодией, очень тихо", "без вибрато, flautando"},
+    {"hollywood-stacc", H_SUS, D_TERR, "обобщённый Голливуд: сбитые акценты и остинато, нарастающие удары", nullptr},
+    {"hollywood-leg", H_IVM | H_SIX, D_SWELL, "обобщённый Голливуд: фанфарная мелодия в октаву, широкое divisi", nullptr},
+    {"hollywood-mix", 0, D_SWELL, "обобщённый Голливуд: остинато 3+3+2 вперемешку с пиццикато, педаль в басу", nullptr},
+    {"hollywood-arp", H_ADD9 | H_MAJ7, D_SWELL, "обобщённый Голливуд: приключенческие разложенные аккорды", nullptr},
 };
 
 const Flavor& flavor(const char* id) {
@@ -514,6 +547,7 @@ struct Ctx {
     int bar, beat, num;
     int holdFrom;        // the last harmony is held, not figured
     bool legato;
+    float levelFrac = 1.0f;  // this part's complexity level, 0..1, so every step of the slider is audible
     int tonic = 0;       // pitch class
     bool minor = false;
     const std::vector<Note>* melody = nullptr;   // the first violins' line in the skeleton
@@ -565,11 +599,14 @@ void cells(const std::vector<Note>& line, const Ctx& c, int unit, F f) {
     }
 }
 
+// the contrast of a texture's own accents scales with the part's complexity level, so moving the
+// slider by one step is audible even between two texture thresholds, not only at the thresholds
 int accent(int t, const Ctx& c) {
+    float k = 0.45f + 0.55f * c.levelFrac;
     int inBar = t % c.bar;
-    if (inBar == 0) return 10;
-    if (inBar % c.beat == 0) return 4;
-    return -8;
+    if (inBar == 0) return (int)std::lround(10 * k);
+    if (inBar % c.beat == 0) return (int)std::lround(4 * k);
+    return -(int)std::lround(8 * k);
 }
 
 std::vector<Note> texSustain(const std::vector<Note>& line, const Ctx& c, int art) {
@@ -1087,7 +1124,21 @@ Result arrange(const std::vector<Note>& notes, const Meta& meta, const Settings&
     }
 
     std::vector<Note> out[NPARTS];
-    for (int i = 0; i < 4; ++i) out[i] = buildPart(tex[i], i, line[i], ctx, pr, lv[i]);
+    for (int i = 0; i < 4; ++i) {
+        Ctx pctx = ctx;
+        pctx.levelFrac = lv[i] / 10.0f;
+        out[i] = buildPart(tex[i], i, line[i], pctx, pr, lv[i]);
+        // every texture's own accent/offset is scaled by this part's complexity level: plainer and
+        // flatter low on the slider, closer to the texture's full character high on it. Archetype
+        // rows (pr.extreme) swing further in both directions than a named composer's style does.
+        float lo = pr.extreme ? 0.15f : 0.45f, hi = pr.extreme ? 1.6f : 1.0f;
+        float k = lo + (hi - lo) * (float)lv[i] / 10.0f;
+        for (auto& n : out[i]) {
+            int base = velAt(line[i], n.start);
+            int delta = n.vel - base;
+            n.vel = clampVel(base + (int)std::lround(delta * k));
+        }
+    }
     if (!quartet) {
         if (tex[P_CB] == Tex::Roots) {
             out[P_CB] = texRoots(line[P_VC], ctx);
@@ -1108,10 +1159,11 @@ Result arrange(const std::vector<Note>& notes, const Meta& meta, const Settings&
         std::set<int> changes;
         for (auto& sp : base.spans) changes.insert(sp.start);
         for (int i = 1; i < NPARTS; ++i) {
-            if (lv[i] < 5) continue;
+            if (lv[i] < 1) continue;
+            int boost = (int)std::lround((pr.extreme ? 3.0 : 4.0) + (pr.extreme ? 21.0 : 14.0) * lv[i] / 10.0);
             for (auto& n : out[i])
                 if (changes.count(n.start) && n.start < hold && n.art != A_PIZZ && n.art != A_TREM)
-                    n.art = A_MARC, n.vel = clampVel(n.vel + 18);
+                    n.art = A_MARC, n.vel = clampVel(n.vel + boost);
         }
     }
 
@@ -1138,9 +1190,36 @@ Result arrange(const std::vector<Note>& notes, const Meta& meta, const Settings&
         for (auto& p : res.parts)
             if (!s.locks.count(p.name))
                 for (auto& n : p.notes) n.vel = clampVel(n.vel + pr.vel);
+
+    // "Живость": 0 plays the style exactly as composed; above 0 it adds a deterministic humanize
+    // (velocity and micro-timing jitter) on top; the phrase-dynamics curve itself is deepened or
+    // flattened by the same control in writeMidi, from res.liveliness.
+    int live = std::max(-10, std::min(10, s.liveliness));
+    if (live > 0) {
+        float amt = live / 10.0f;
+        auto hash = [](int x) {
+            unsigned v = (unsigned)x * 2654435761u;
+            v ^= v >> 13; v *= 0x5bd1e995u; v ^= v >> 15;
+            return (int)(v % 1000);
+        };
+        for (size_t pi = 0; pi < res.parts.size(); ++pi) {
+            auto& p = res.parts[pi];
+            if (s.locks.count(p.name)) continue;
+            for (auto& n : p.notes) {
+                int dv = hash(n.start * 131 + n.pitch * 17 + (int)pi * 977) % 21 - 10;   // -10..10
+                n.vel = clampVel(n.vel + (int)std::lround(dv * amt));
+                if (n.art == A_PIZZ) continue;   // a pluck's attack should not drift
+                int dt = hash(n.start * 211 + n.pitch * 31 + (int)pi * 701 + 1) % 17 - 8;   // -8..8 ticks
+                int shift = (int)std::lround(dt * amt);
+                int newStart = std::max(0, n.start + shift);
+                if (newStart < n.end - 20) n.start = newStart;
+            }
+        }
+    }
     res.sectionLabel = std::string(sectionDesks(sec, s.composer));
     res.manner = fl.manner;
     res.dynamics = fl.dyn;
+    res.liveliness = live;
     res.quartet = quartet;
 
     // ---- checks of the finished parts
@@ -1289,7 +1368,7 @@ int soundingEnd(const Note& n, bool overlap, bool nextJoins) {
 //   arch: one arch over four bars, the peak a little after the middle;
 //   terraced: loud and soft blocks of two bars, as in baroque music;
 //   swell: wide two-bar swells; flat: nearly still; wave: one long arch over eight bars
-int dynamicsAt(int t, int bar, int total, int shape) {
+int dynamicsAt(int t, int bar, int total, int shape, double depthMul) {
     const double pi = 3.14159265358979;
     auto arch = [&](int phrase, double lo, double span) {
         double x = (double)(t % phrase) / phrase;
@@ -1297,14 +1376,17 @@ int dynamicsAt(int t, int bar, int total, int shape) {
         return lo + span * std::sin(pi * w);
     };
     int four = std::max(bar, std::min(4 * bar, ((total + bar - 1) / bar) * bar));
-    double v;
+    double v, center;
     switch (shape) {
-        case D_TERR: v = (t / (2 * bar)) % 2 == 0 ? 96.0 : 62.0; break;
-        case D_SWELL: v = arch(std::max(bar, std::min(2 * bar, four)), 38.0, 74.0); break;
-        case D_FLAT: v = 58.0 + 6.0 * std::sin(2 * pi * (double)t / (8.0 * bar)); break;
-        case D_WAVE: v = arch(std::max(bar, std::min(8 * bar, ((total + bar - 1) / bar) * bar)), 44.0, 58.0); break;
-        default: v = arch(four, 46.0, 44.0); break;
+        case D_TERR: v = (t / (2 * bar)) % 2 == 0 ? 96.0 : 62.0; center = 79.0; break;
+        case D_SWELL: v = arch(std::max(bar, std::min(2 * bar, four)), 38.0, 74.0); center = 75.0; break;
+        case D_FLAT: v = 58.0 + 6.0 * std::sin(2 * pi * (double)t / (8.0 * bar)); center = 58.0; break;
+        case D_WAVE: v = arch(std::max(bar, std::min(8 * bar, ((total + bar - 1) / bar) * bar)), 44.0, 58.0); center = 73.0; break;
+        default: v = arch(four, 46.0, 44.0); center = 68.0; break;
     }
+    // "Живость" deepens this curve above its 0 (as-composed) setting and flattens it below: the
+    // shape stays the one the style chose, only how far it swings around its own centre changes.
+    v = center + (v - center) * depthMul;
     int tail = four / 4;
     if (shape != D_FLAT && total - t < tail) v = std::min(v, 40.0 + 30.0 * (double)(total - t) / tail);   // dies away at the end
     return std::max(1, std::min(127, (int)std::lround(v)));
@@ -1312,7 +1394,7 @@ int dynamicsAt(int t, int bar, int total, int shape) {
 
 std::vector<unsigned char> trackBytes(const std::string& name, int chan, const std::vector<Note>& notes,
                                       const std::vector<std::pair<int, std::string>>& texts, const MidiOptions& o,
-                                      int program, bool curve, int bar, int total, int shape) {
+                                      int program, bool curve, int bar, int total, int shape, double depthMul) {
     std::vector<Ev> ev;
     bool lib = o.library != Library::None;
     bool overlap = lib;
@@ -1334,7 +1416,7 @@ std::vector<unsigned char> trackBytes(const std::string& name, int chan, const s
     if (curve && !notes.empty()) {
         int last = -1;
         for (int t = notes.front().start; t < total; t += 60) {
-            int v = dynamicsAt(t, bar, total, shape);
+            int v = dynamicsAt(t, bar, total, shape, depthMul);
             if (v == last) continue;
             last = v;
             ev.push_back({t, 1, {(unsigned char)(0xB0 | chan), 1, (unsigned char)v}});
@@ -1377,6 +1459,7 @@ std::vector<unsigned char> writeMidi(const Result& r, const Meta& meta, const Mi
     int total = 0;
     for (auto& p : r.parts)
         for (auto& n : p.notes) total = std::max(total, n.end);
+    double depthMul = 1.0 + std::max(-10, std::min(10, r.liveliness)) / 10.0 * 0.6;
 
     struct Tr { std::string name; std::vector<Note> notes; int program; bool curve; std::vector<std::pair<int, std::string>> texts; };
     std::vector<Tr> tracks;
@@ -1440,7 +1523,7 @@ std::vector<unsigned char> writeMidi(const Result& r, const Meta& meta, const Mi
     for (size_t i = 0; i < tracks.size(); ++i) {
         int chan = (int)i < 9 ? (int)i : std::min(15, (int)i + 1);   // channel 10 is drums in General MIDI
         putTrack(out, trackBytes(tracks[i].name, chan, tracks[i].notes, tracks[i].texts, o, tracks[i].program,
-                                 tracks[i].curve, bar, total, r.dynamics));
+                                 tracks[i].curve, bar, total, r.dynamics, depthMul));
     }
     return out;
 }

@@ -159,9 +159,10 @@ struct PianoVoice : juce::SynthesiserVoice {
 const char* VOICE_IDS[strings::NPARTS] = {"voiceV1", "voiceV2", "voiceVa", "voiceVc", "voiceCb"};
 // parameters that change the arrangement
 const char* PARAM_IDS[] = {"style", "complexity", "voiceV1", "voiceV2", "voiceVa", "voiceVc", "voiceCb",
-                           "section", "input", "variant"};
+                           "section", "input", "variant", "liveliness"};
 // what a saved variant remembers (everything that shapes the arrangement inside a style)
-const char* SLOT_IDS[] = {"complexity", "voiceV1", "voiceV2", "voiceVa", "voiceVc", "voiceCb", "section", "variant"};
+const char* SLOT_IDS[] = {"complexity", "voiceV1", "voiceV2", "voiceVa", "voiceVc", "voiceCb", "section", "variant",
+                          "liveliness"};
 
 }  // namespace
 
@@ -187,6 +188,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout StringsProcessor::layout() {
     l.add(std::make_unique<AudioParameterChoice>(ParameterID{"input", 1}, "Input",
                                                  StringArray{U("Авто"), U("Аккорды"), U("Гармонизовать мелодию")}, 0));
     l.add(std::make_unique<AudioParameterInt>(ParameterID{"variant", 1}, "Variant", 0, 9999, 0));
+    l.add(std::make_unique<AudioParameterInt>(ParameterID{"liveliness", 1}, "Liveliness", -10, 10, 0));
     l.add(std::make_unique<AudioParameterChoice>(ParameterID{"sound", 1}, "Preview sound",
                                                  StringArray{U("Пианино"), U("Струнная секция")}, 0));
     return l;
@@ -375,6 +377,7 @@ strings::Settings StringsProcessor::currentSettings() const {
     int in = (int)*params.getRawParameterValue("input");
     s.input = in == 1 ? choir::InputMode::Chords : in == 2 ? choir::InputMode::HarmonizeMelody : choir::InputMode::Auto;
     s.variant = (int)*params.getRawParameterValue("variant");
+    s.liveliness = (int)*params.getRawParameterValue("liveliness");
     s.locks = locks_;
     s.skeletonLocks = skeletonLocks_;
     return s;
